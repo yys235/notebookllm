@@ -1,0 +1,23 @@
+# Ignore generated and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Ignore environment-specific configurations
+*.local
+*.secrets
+
+# Ignore backup files (except templates)
+backups/
+*.tar.gz
+*.dump
+*.dump.sha256
+
+# Ignore compiled scripts
+scripts/*.pyc
+
+# Ignore OS files
+.DS_Store
+Thumbs.db

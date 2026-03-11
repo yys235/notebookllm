@@ -1,0 +1,245 @@
+# Prometheus Alerting Rules for NotebookLLM Backend
+#
+# Usage:
+#   1. Copy to prometheus/rules/
+#   2. Reference in prometheus.yml: rule_files: ['prometheus-alerts.yml']
+#   3. Reload Prometheus: curl -X POST http://localhost:9090/-/reload
+
+groups:
+  # ========================================================================
+  # API Service Alerts
+  # ========================================================================
+  - name: api_alerts
+    interval: 30s
+    rules:
+      # Service completely down
+      - alert: ServiceDown
+        expr: up{job="team1-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          priority: P0
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "Service has been down for more than 1 minute"
+          runbook: "https://docs.example.com/runbooks/service-down"
+
+      # High error rate (5xx responses)
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m])) /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (>5%)"
+
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m])) /
+          sum(rate(http_requests_total[5m])) > 0.2
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          priority: P0
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (>20%)"
+
+      # High latency alerts
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "High latency on {{ $labels.path }}"
+          description: "P95 latency is {{ $value }}s (>2s)"
+
+      - alert: CriticalLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, path)
+          ) > 5
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          priority: P1
+        annotations:
+          summary: "Critical latency on {{ $labels.path }}"
+          description: "P95 latency is {{ $value }}s (>5s)"
+
+  # ========================================================================
+  # Dependency Alerts
+  # ========================================================================
+  - name: dependency_alerts
+    interval: 30s
+    rules:
+      # Database alerts
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+          priority: P0
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL has been down for more than 1 minute"
+
+      - alert: HighDatabaseLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(db_query_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "High database latency"
+          description: "P95 DB query latency is {{ $value }}s (>1s)"
+
+      - alert: DatabasePoolExhausted
+        expr: db_connections_active{state="idle"} < 2
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Less than 2 idle connections available"
+
+      # Redis alerts
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          team: backend
+          priority: P1
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute"
+
+      # AI service alerts
+      - alert: HighAIFailureRate
+        expr: |
+          sum(rate(ai_requests_total{status="error"}[5m])) /
+          sum(rate(ai_requests_total[5m])) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "High AI service failure rate"
+          description: "AI service error rate is {{ $value | humanizePercentage }} (>30%)"
+
+      - alert: AICompletelyDown
+        expr: |
+          sum(rate(ai_requests_total{status="error"}[5m])) /
+          sum(rate(ai_requests_total[5m])) > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          priority: P1
+        annotations:
+          summary: "AI service is completely down"
+          description: "AI service error rate is {{ $value | humanizePercentage }} (>90%)"
+
+  # ========================================================================
+  # Resource Alerts
+  # ========================================================================
+  - name: resource_alerts
+    interval: 30s
+    rules:
+      # Memory alerts
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="team1-backend"} /
+          1024 / 1024 / 1024 > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+          priority: P3
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}GB (>2GB)"
+
+      - alert: CriticalMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="team1-backend"} /
+          1024 / 1024 / 1024 > 4
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+          priority: P1
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value }}GB (>4GB)"
+
+      # Request queue alerts
+      - alert: HighRequestQueue
+        expr: |
+          sum(http_requests_in_progress) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+        annotations:
+          summary: "High number of in-flight requests"
+          description: "{{ $value }} requests currently in progress"
+
+  # ========================================================================
+  # Business Metrics Alerts
+  # ========================================================================
+  - name: business_alerts
+    interval: 1m
+    rules:
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: |
+          sum(rate(cache_operations_total{result="miss"}[5m])) /
+          sum(rate(cache_operations_total{operation="get"}[5m])) > 0.5
+        for: 10m
+        labels:
+          severity: info
+          team: backend
+          priority: P3
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache miss rate is {{ $value | humanizePercentage }} (>50%)"
+
+      # High authentication failure rate
+      - alert: HighAuthFailureRate
+        expr: |
+          sum(rate(auth_attempts_total{status="failure"}[5m])) /
+          sum(rate(auth_attempts_total[5m])) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          team: backend
+          priority: P2
+          security: "true"
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Auth failure rate is {{ $value | humanizePercentage }} (>30%)"

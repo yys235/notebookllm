@@ -1,0 +1,44 @@
+# Core
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
+pydantic-settings>=2.6.0
+
+# Database
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+asyncpg>=0.30.0
+
+# Cache & Message Queue
+redis>=5.2.1
+
+# Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.20
+
+# HTTP Client
+aiohttp>=3.11.0
+httpx>=0.28.0
+
+# Observability
+prometheus-client>=0.21.0
+structlog>=25.1.0
+opentelemetry-api>=1.29.0
+opentelemetry-sdk>=1.29.0
+opentelemetry-instrumentation-fastapi>=0.50b0
+opentelemetry-instrumentation-sqlalchemy>=0.50b0
+opentelemetry-exporter-otlp>=1.29.0
+
+# Stability
+tenacity>=9.0.0
+slowapi>=0.1.9
+
+# Development
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-cov>=6.0.0
+pytest-mock>=3.14.0
+ruff>=0.9.0
+mypy>=1.14.0
+pre-commit>=4.0.0
