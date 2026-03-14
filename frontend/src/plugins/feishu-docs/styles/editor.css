@@ -1,0 +1,307 @@
+/**
+ * 飞书文档编辑器样式
+ */
+
+/* 编辑器容器 */
+.feishu-docs-editor {
+  position: relative;
+  min-height: 100%;
+  background: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1a1a1a;
+}
+
+.feishu-docs-editor.is-editable {
+  cursor: text;
+}
+
+/* 工具栏 */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: #e8e8e8;
+  margin: 0 8px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #595959;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: #e6e6e6;
+  color: #1a1a1a;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn.active {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.toolbar-btn.bold {
+  font-weight: 700;
+}
+
+.toolbar-btn.italic {
+  font-style: italic;
+}
+
+.toolbar-btn.underline {
+  text-decoration: underline;
+}
+
+.toolbar-btn.strikethrough {
+  text-decoration: line-through;
+}
+
+/* 下拉菜单 */
+.dropdown-group {
+  position: relative;
+}
+
+.dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  min-width: 80px;
+}
+
+.dropdown-arrow {
+  font-size: 10px;
+  color: #8c8c8c;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 120px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.08);
+  padding: 4px 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: all 0.15s;
+  z-index: 100;
+}
+
+.dropdown-group:hover .dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+  color: #1a1a1a;
+  cursor: pointer;
+}
+
+.dropdown-menu button:hover {
+  background: #f5f5f5;
+}
+
+/* 编辑区域 */
+.editor-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 48px;
+  min-height: calc(100vh - 200px);
+}
+
+.blocks-container {
+  min-height: 200px;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  color: #8c8c8c;
+  cursor: pointer;
+}
+
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-state:hover {
+  color: #1890ff;
+}
+
+/* 加载状态 */
+.editor-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px;
+  color: #8c8c8c;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #1890ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 底部提示 */
+.editor-hint {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: #fafafa;
+  border-top: 1px solid #e8e8e8;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.editor-hint code {
+  display: inline-block;
+  padding: 2px 6px;
+  background: #e8e8e8;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 11px;
+}
+
+.hint-divider {
+  color: #d9d9d9;
+}
+
+/* 选择样式 */
+::selection {
+  background: rgba(24, 144, 255, 0.2);
+}
+
+/* 占位符样式 */
+[contenteditable]:empty::before {
+  content: attr(data-placeholder);
+  color: #bfbfbf;
+  pointer-events: none;
+}
+
+/* 焦点样式 */
+[contenteditable]:focus {
+  outline: none;
+}
+
+/* 滚动条样式 */
+.blocks-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.blocks-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.blocks-container::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.blocks-container::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+/* 打印样式 */
+@media print {
+  .editor-toolbar,
+  .editor-hint,
+  .block-handle {
+    display: none !important;
+  }
+
+  .editor-container {
+    padding: 0;
+    max-width: none;
+  }
+
+  .block-wrapper {
+    padding-left: 0;
+  }
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .editor-container {
+    padding: 16px 24px;
+  }
+
+  .editor-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .toolbar-divider {
+    display: none;
+  }
+
+  .editor-hint {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}

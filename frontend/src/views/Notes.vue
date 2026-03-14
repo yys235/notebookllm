@@ -12,10 +12,15 @@ import {
   TagOutlined,
   PushpinFilled,
   GlobalOutlined,
+  FileTextOutlined,
+  TableOutlined,
+  ApartmentOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons-vue'
 import { useNoteStore } from '@/stores/note'
 import { useUserStore } from '@/stores/user'
 import { formatRelativeTime } from '@/utils/date'
+import type { EditorType } from '@/plugins/core/types'
 
 const router = useRouter()
 const noteStore = useNoteStore()
@@ -25,6 +30,54 @@ const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
 const viewMode = ref<'grid' | 'list'>('list')
 const sortBy = ref<'updated' | 'created' | 'title'>('updated')
+
+// Document type selection
+const showTypeModal = ref(false)
+const selectedDocType = ref<EditorType>('docx')
+
+// Document type options
+const docTypes = [
+  {
+    type: 'feishu-docs' as EditorType,
+    name: '飞书文档',
+    description: '块级编辑器，支持斜杠命令、拖拽等',
+    icon: FileTextOutlined,
+    color: '#1890ff',
+    bgColor: '#e6f7ff',
+  },
+  {
+    type: 'docx' as EditorType,
+    name: '富文本文档',
+    description: '支持 Markdown、图片、代码块等',
+    icon: FileTextOutlined,
+    color: '#52c41a',
+    bgColor: '#f6ffed',
+  },
+  {
+    type: 'excel' as EditorType,
+    name: '电子表格',
+    description: '数据表格、公式计算',
+    icon: TableOutlined,
+    color: '#fa8c16',
+    bgColor: '#fff7e6',
+  },
+  {
+    type: 'mindmap' as EditorType,
+    name: '思维导图',
+    description: '脑图、知识结构图',
+    icon: ApartmentOutlined,
+    color: '#722ed1',
+    bgColor: '#f9f0ff',
+  },
+  {
+    type: 'flowchart' as EditorType,
+    name: '流程图',
+    description: '流程图、架构图',
+    icon: BranchesOutlined,
+    color: '#eb2f96',
+    bgColor: '#fff0f6',
+  },
+]
 
 // Mock tags - will be replaced with actual data from API
 const availableTags = ref<string[]>([
@@ -103,8 +156,21 @@ function openNote(noteId: string) {
   router.push(`/notes/${noteId}`)
 }
 
+function showCreateNoteModal() {
+  showTypeModal.value = true
+}
+
+function selectDocType(type: EditorType) {
+  selectedDocType.value = type
+}
+
 function createNewNote() {
-  router.push('/notes/new')
+  showTypeModal.value = false
+  // Pass editor type as query parameter
+  router.push({
+    path: '/notes/new',
+    query: { type: selectedDocType.value }
+  })
 }
 
 function toggleViewMode(mode: 'grid' | 'list') {
@@ -148,7 +214,7 @@ function goToSettings() {
             <template #icon><FilterOutlined /></template>
             Settings
           </a-button>
-          <a-button type="primary" @click="createNewNote">
+          <a-button type="primary" @click="showCreateNoteModal">
             <template #icon><PlusOutlined /></template>
             New Note
           </a-button>
@@ -315,6 +381,43 @@ function goToSettings() {
         />
       </div>
     </a-layout-content>
+
+    <!-- Document Type Selection Modal -->
+    <a-modal
+      v-model:open="showTypeModal"
+      title="创建新文档"
+      :footer="null"
+      width="600px"
+      centered
+    >
+      <div class="doc-type-grid">
+        <div
+          v-for="docType in docTypes"
+          :key="docType.type"
+          class="doc-type-card"
+          :class="{ 'selected': selectedDocType === docType.type }"
+          @click="selectDocType(docType.type)"
+        >
+          <div class="doc-type-icon" :style="{ backgroundColor: docType.bgColor, color: docType.color }">
+            <component :is="docType.icon" />
+          </div>
+          <div class="doc-type-info">
+            <div class="doc-type-name">{{ docType.name }}</div>
+            <div class="doc-type-desc">{{ docType.description }}</div>
+          </div>
+          <div v-if="selectedDocType === docType.type" class="doc-type-check">
+            <a-checkbox checked />
+          </div>
+        </div>
+      </div>
+      <div class="doc-type-footer">
+        <a-button @click="showTypeModal = false">取消</a-button>
+        <a-button type="primary" @click="createNewNote">
+          <template #icon><PlusOutlined /></template>
+          创建文档
+        </a-button>
+      </div>
+    </a-modal>
   </a-layout>
 </template>
 
@@ -609,6 +712,82 @@ function goToSettings() {
 
   .logo-section h1 {
     display: none;
+  }
+}
+
+/* Document Type Selection Modal */
+.doc-type-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.doc-type-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid #e8e8e8;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.doc-type-card:hover {
+  border-color: #1890ff;
+  background: #fafafa;
+}
+
+.doc-type-card.selected {
+  border-color: #1890ff;
+  background: #e6f7ff;
+}
+
+.doc-type-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.doc-type-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-type-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.doc-type-desc {
+  font-size: 13px;
+  color: #8c8c8c;
+}
+
+.doc-type-check {
+  flex-shrink: 0;
+}
+
+.doc-type-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e8e8e8;
+}
+
+@media (max-width: 600px) {
+  .doc-type-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

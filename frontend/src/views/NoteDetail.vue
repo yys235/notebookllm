@@ -12,8 +12,9 @@ import {
   CheckOutlined,
 } from '@ant-design/icons-vue'
 import { noteApi } from '@/api/notes'
-import TiptapEditor from '@/components/TiptapEditor.vue'
+import EditorHost from '@/components/editor/EditorHost.vue'
 import ShareModal from '@/components/ShareModal.vue'
+import type { EditorType } from '@/plugins/core/types'
 
 const router = useRouter()
 const route = useRoute()
@@ -27,6 +28,15 @@ const noteId = computed(() => route.params.id as string)
 const saving = ref(false)
 const shareModalVisible = ref(false)
 const isEditing = ref(false) // Default to read-only mode
+
+// Editor type - read from query param or use default
+const editorType = computed<EditorType>(() => {
+  const type = route.query.type as string
+  if (type && ['docx', 'docx-blocks', 'feishu-docs', 'excel', 'mindmap', 'flowchart'].includes(type)) {
+    return type as EditorType
+  }
+  return 'docx'
+})
 
 // 加载笔记
 async function loadNote(id: string) {
@@ -276,11 +286,12 @@ async function togglePinned() {
           class="note-title-input"
           :readonly="!isEditing"
         />
-        <TiptapEditor
-          v-memo="[content, isEditing]"
+        <EditorHost
+          v-memo="[content, isEditing, editorType]"
           v-model="content"
           placeholder="开始编写笔记，支持 Markdown 语法..."
           :editable="isEditing"
+          :editor-type="editorType"
         />
       </div>
     </a-layout-content>

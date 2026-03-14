@@ -11,7 +11,7 @@ import {
   CloseOutlined,
   LoadingOutlined,
 } from '@ant-design/icons-vue'
-import TiptapEditor from '@/components/TiptapEditor.vue'
+import EditorHost from '@/components/editor/EditorHost.vue'
 import { useNoteStore } from '@/stores/note'
 import { useUserStore } from '@/stores/user'
 
@@ -263,7 +263,7 @@ onMounted(() => {
       <!-- Center Panel - Editor -->
       <div class="center-panel">
         <div class="editor-container">
-          <TiptapEditor v-model="content" placeholder="Start writing..." />
+          <EditorHost v-model="content" placeholder="Start writing..." editor-type="docx" />
         </div>
       </div>
 
