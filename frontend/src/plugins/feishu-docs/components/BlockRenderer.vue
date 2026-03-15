@@ -90,12 +90,11 @@ const isDragging = ref(false)
 const isDragOver = ref(false)
 const dragPosition = ref<'before' | 'after' | 'child'>('after')
 
-// 全局存储当前拖拽的块 ID（因为 dragover 中无法读取 dataTransfer）
+// 全局存储当前拖拽的块 ID
 let currentDraggedBlockId: string | null = null
-let currentDropTargetId: string | null = null
-let currentDropPosition: 'before' | 'after' | 'child' | null = null
-let dragOffsetX = 0
-let dragOffsetY = 0
+let targetInsertAfterId: string | null = null  // 目标插入位置：放在这个块之后
+let draggedBlockOriginalY = 0  // 被拖拽块原始 Y 位置
+let dragOffsetY = 0  // 鼠标相对于块顶部的偏移
 
 // 开始拖拽
 function handleDragStart(event: DragEvent) {
@@ -114,289 +113,145 @@ function handleDragStart(event: DragEvent) {
   event.dataTransfer.setData('text/plain', props.block.id)
   event.dataTransfer.setData('application/x-block-id', props.block.id)
 
-  // 获取当前块的 DOM 元素
+  // 记录被拖拽块的原始位置和偏移量
   const blockWrapper = document.querySelector(`[data-block-id="${props.block.id}"]`) as HTMLElement
-
-  // 创建跟随鼠标的拖拽预览
-  const dragPreview = document.createElement('div')
-  dragPreview.id = 'active-drag-preview'
-
   if (blockWrapper) {
-    // 克隆整个块
-    const clone = blockWrapper.cloneNode(true) as HTMLElement
-
-    // 复制计算样式到克隆元素
-    const computedStyle = window.getComputedStyle(blockWrapper)
-    const importantStyles = [
-      'display', 'position', 'width', 'height', 'padding', 'margin',
-      'font', 'fontSize', 'fontWeight', 'fontFamily', 'lineHeight',
-      'color', 'backgroundColor', 'border', 'borderRadius',
-      'boxShadow', 'textDecoration', 'textAlign', 'whiteSpace',
-      'overflow', 'textOverflow', 'wordBreak', 'minHeight'
-    ]
-
-    importantStyles.forEach(prop => {
-      const value = computedStyle.getPropertyValue(prop.replace(/([A-Z])/g, '-$1').toLowerCase())
-      if (value) {
-        clone.style.setProperty(prop.replace(/([A-Z])/g, '-$1').toLowerCase(), value)
-      }
-    })
-
-    // 复制子元素的样式
-    const originalChildren = blockWrapper.querySelectorAll('*')
-    const clonedChildren = clone.querySelectorAll('*')
-    originalChildren.forEach((el, index) => {
-      if (clonedChildren[index]) {
-        const childStyle = window.getComputedStyle(el as HTMLElement)
-        const clonedChild = clonedChildren[index] as HTMLElement
-        importantStyles.forEach(prop => {
-          const cssProp = prop.replace(/([A-Z])/g, '-$1').toLowerCase()
-          const value = childStyle.getPropertyValue(cssProp)
-          if (value) {
-            clonedChild.style.setProperty(cssProp, value)
-          }
-        })
-      }
-    })
-
-    clone.style.width = blockWrapper.offsetWidth + 'px'
-    clone.style.margin = '0'
-    clone.removeAttribute('data-block-id')
-    clone.classList.remove('has-drag-active', 'is-dragging')
-
-    dragPreview.appendChild(clone)
-
-    // 计算鼠标相对于块左上角的偏移量（用于保持相对位置）
     const rect = blockWrapper.getBoundingClientRect()
-    dragOffsetX = event.clientX - rect.left
+    draggedBlockOriginalY = rect.top
     dragOffsetY = event.clientY - rect.top
-
-    // 获取第一行文字的高度，调整为第一行居中
-    const contentEl = blockWrapper.querySelector('.block-content') as HTMLElement
-    if (contentEl) {
-      const lineHeight = parseFloat(window.getComputedStyle(contentEl).lineHeight) || 20
-      // 鼠标位置调整为第一行文字的垂直中心
-      dragOffsetY = rect.top + lineHeight / 2 - event.clientY + (event.clientY - rect.top)
-      dragOffsetY = Math.min(dragOffsetY, 30) // 限制最大偏移
-    }
   }
-
-  dragPreview.style.cssText = `
-    position: fixed;
-    pointer-events: none;
-    z-index: 10000;
-    opacity: 0.95;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    border-radius: 6px;
-    overflow: hidden;
-    background: #fff;
-    border: 1px solid #e8e8e8;
-  `
-  document.body.appendChild(dragPreview)
 
   // 使用透明图像作为拖拽图标
   const transparentImg = new Image()
   transparentImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
   event.dataTransfer.setDragImage(transparentImg, 0, 0)
-
-  // 设置初始位置
-  requestAnimationFrame(() => {
-    const preview = document.getElementById('active-drag-preview')
-    if (preview) {
-      preview.style.left = event.clientX - dragOffsetX + 'px'
-      preview.style.top = event.clientY - dragOffsetY + 'px'
-    }
-  })
 }
 
-// 拖拽移动时更新预览位置和其他块的位置
+// 拖拽移动时更新被拖拽块位置和其他块的位置
 function handleDrag(event: DragEvent) {
-  const preview = document.getElementById('active-drag-preview')
-  if (preview) {
-    // drag 事件在最后会触发一次 clientX=0, clientY=0 的情况
-    if (event.clientX !== 0 || event.clientY !== 0) {
-      preview.style.left = event.clientX - dragOffsetX + 'px'
-      preview.style.top = event.clientY - dragOffsetY + 'px'
+  // drag 事件在最后会触发一次 clientX=0, clientY=0 的情况
+  if (event.clientX === 0 && event.clientY === 0) return
 
-      // 更新其他块的位置 - 让鼠标经过位置下方的块下滑
-      updateBlocksPosition(event.clientY)
+  // 1. 让被拖拽的块跟随鼠标
+  const draggedBlock = document.querySelector(`[data-block-id="${currentDraggedBlockId}"]`) as HTMLElement
+  if (draggedBlock) {
+    const targetY = event.clientY - dragOffsetY
+    const offsetY = targetY - draggedBlockOriginalY
+    draggedBlock.style.transform = `translateY(${offsetY}px)`
+  }
+
+  // 2. 根据鼠标 Y 坐标更新其他块的位置（避让）
+  updateBlocksPosition(event.clientY)
+}
+
+// 根据鼠标 Y 坐标计算目标插入位置，并让其他块避让
+function updateBlocksPosition(mouseY: number) {
+  const allBlocks = Array.from(document.querySelectorAll('.block-wrapper')) as HTMLElement[]
+  const draggedBlock = document.querySelector(`[data-block-id="${currentDraggedBlockId}"]`) as HTMLElement
+  const draggedHeight = draggedBlock ? draggedBlock.offsetHeight : 0
+
+  // 找到鼠标位置对应的插入点（应该放在哪个块之后）
+  let insertAfterIndex = -1  // -1 表示放在最前面
+
+  for (let i = 0; i < allBlocks.length; i++) {
+    const block = allBlocks[i]
+    if (!block) continue
+
+    const blockId = block.getAttribute('data-block-id')
+    // 跳过被拖拽的块本身
+    if (blockId === currentDraggedBlockId) continue
+
+    const rect = block.getBoundingClientRect()
+    const blockMiddle = rect.top + rect.height / 2
+
+    // 如果鼠标在块的中间位置以下，则放在这个块之后
+    if (mouseY > blockMiddle) {
+      insertAfterIndex = i
+    } else {
+      // 鼠标在这个块的中间位置以上，停止查找
+      break
     }
   }
-}
 
-// 更新其他块的位置 - 根据鼠标Y坐标让下方的块下滑
-function updateBlocksPosition(mouseY: number) {
-  const allBlocks = document.querySelectorAll('.block-wrapper')
+  // 更新目标插入位置
+  const targetBlock = allBlocks[insertAfterIndex]
+  if (insertAfterIndex >= 0 && targetBlock) {
+    targetInsertAfterId = targetBlock.getAttribute('data-block-id')
+  } else {
+    targetInsertAfterId = null  // 放在最前面
+  }
 
-  allBlocks.forEach(block => {
-    const el = block as HTMLElement
-    const rect = el.getBoundingClientRect()
-    const blockId = el.getAttribute('data-block-id')
+  // 更新所有块的位置：让目标位置下方的块向下滑动避让
+  allBlocks.forEach((block) => {
+    if (!block) return
 
+    const blockId = block.getAttribute('data-block-id')
     // 跳过被拖拽的块本身
     if (blockId === currentDraggedBlockId) return
 
-    // 判断块的顶部是否在鼠标下方
+    // 判断这个块是否需要避让（在鼠标位置下方）
+    const rect = block.getBoundingClientRect()
     if (rect.top > mouseY) {
-      // 鼠标经过的块下方 - 向下滑动让位
-      el.classList.add('is-shifted')
+      // 在鼠标下方，向下滑动让位
+      block.classList.add('is-shifted')
+      block.style.transform = `translateY(${draggedHeight + 8}px)`
     } else {
-      // 鼠标经过的块上方 - 恢复原位
-      el.classList.remove('is-shifted')
+      block.classList.remove('is-shifted')
+      block.style.transform = ''
     }
   })
 }
 
 // 拖拽结束
 function handleDragEnd(_event: DragEvent) {
+  // 执行实际的块移动
+  if (currentDraggedBlockId && targetInsertAfterId !== undefined) {
+    if (targetInsertAfterId === null) {
+      // 放在最前面
+      const firstBlock = store.rootBlocks[0]
+      if (firstBlock && firstBlock.id !== currentDraggedBlockId) {
+        store.moveBlock(currentDraggedBlockId, { beforeId: firstBlock.id })
+      }
+    } else {
+      // 放在目标块之后
+      store.moveBlock(currentDraggedBlockId, { afterId: targetInsertAfterId })
+    }
+  }
+
   isDragging.value = false
   isDragOver.value = false
   currentDraggedBlockId = null
+  targetInsertAfterId = null
 
-  // 移除所有块的拖拽激活状态和占位
+  // 移除所有块的拖拽状态和 transform
   document.querySelectorAll('.block-wrapper').forEach(el => {
-    el.classList.remove('has-drag-active', 'is-drop-before', 'is-drop-after', 'is-shifted')
+    el.classList.remove('has-drag-active', 'is-shifted')
+    ;(el as HTMLElement).style.transform = ''
   })
-
-  // 移除拖拽预览
-  const preview = document.getElementById('active-drag-preview')
-  if (preview) preview.remove()
-
-  // 移除占位元素
-  const placeholder = document.getElementById('drop-placeholder')
-  if (placeholder) placeholder.remove()
-
-  currentDropTargetId = null
-  currentDropPosition = null
 }
 
 // 拖拽进入
 function handleDragEnter(event: DragEvent) {
   event.preventDefault()
-
-  if (!isDropAllowed()) return
-
-  isDragOver.value = true
-  updateDragPosition(event)
-  updateDropPlaceholder()
 }
 
 // 拖拽离开
-function handleDragLeave(event: DragEvent) {
-  // 检查是否真的离开了元素
-  const target = event.currentTarget as HTMLElement
-  const relatedTarget = event.relatedTarget as HTMLElement
-  if (target.contains(relatedTarget)) return
-
-  isDragOver.value = false
+function handleDragLeave(_event: DragEvent) {
+  // 不需要处理
 }
 
 // 拖拽悬停
 function handleDragOver(event: DragEvent) {
   event.preventDefault()
-
-  if (!isDropAllowed()) return
-
-  event.dataTransfer!.dropEffect = 'move'
-  isDragOver.value = true
-  updateDragPosition(event)
-  updateDropPlaceholder()
-}
-
-// 更新占位元素位置
-function updateDropPlaceholder() {
-  if (currentDropTargetId === props.block.id && currentDropPosition === dragPosition.value) {
-    return
-  }
-
-  // 移除旧的占位样式
-  document.querySelectorAll('.is-drop-before, .is-drop-after').forEach(el => {
-    el.classList.remove('is-drop-before', 'is-drop-after')
-  })
-
-  currentDropTargetId = props.block.id
-  currentDropPosition = dragPosition.value
-
-  // 添加新的占位样式
-  const blockWrapper = document.querySelector(`[data-block-id="${props.block.id}"]`)
-  if (blockWrapper) {
-    if (dragPosition.value === 'before') {
-      blockWrapper.classList.add('is-drop-before')
-    } else if (dragPosition.value === 'after') {
-      blockWrapper.classList.add('is-drop-after')
-    }
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
   }
 }
 
-// 放下
+// 放下 - 实际移动在 handleDragEnd 中处理
 function handleDrop(event: DragEvent) {
   event.preventDefault()
   event.stopPropagation()
-
-  isDragOver.value = false
-
-  const draggedBlockId = currentDraggedBlockId || event.dataTransfer?.getData('application/x-block-id')
-  if (!draggedBlockId || draggedBlockId === props.block.id) return
-
-  // 执行移动
-  const options: { afterId?: string; beforeId?: string; parentId?: string } = {}
-
-  if (dragPosition.value === 'before') {
-    options.beforeId = props.block.id
-  } else if (dragPosition.value === 'after') {
-    options.afterId = props.block.id
-  } else {
-    options.parentId = props.block.id
-  }
-
-  store.moveBlock(draggedBlockId, options)
-
-  // 清理
-  currentDraggedBlockId = null
-  currentDropTargetId = null
-  currentDropPosition = null
-}
-
-// 检查是否允许放置
-function isDropAllowed(): boolean {
-  const draggedBlockId = currentDraggedBlockId
-  if (!draggedBlockId) return false
-
-  // 不能拖到自己身上
-  if (draggedBlockId === props.block.id) return false
-
-  // 不能拖到自己的子块中
-  const draggedBlock = store.getBlock(draggedBlockId)
-  if (draggedBlock) {
-    let current = store.getBlock(props.block.id)
-    while (current) {
-      if (current.id === draggedBlockId) return false
-      current = current.parentId ? store.getBlock(current.parentId) : null
-    }
-  }
-
-  return true
-}
-
-// 更新拖拽位置
-function updateDragPosition(event: DragEvent) {
-  const target = event.currentTarget as HTMLElement
-  const rect = target.getBoundingClientRect()
-  const y = event.clientY - rect.top
-  const height = rect.height
-
-  if (y < height * 0.3) {
-    dragPosition.value = 'before'
-  } else if (y > height * 0.7) {
-    dragPosition.value = 'after'
-  } else {
-    // 只有容器类型才能作为父块
-    if (isContainerType.value) {
-      dragPosition.value = 'child'
-    } else {
-      dragPosition.value = y < height * 0.5 ? 'before' : 'after'
-    }
-  }
 }
 
 // 子块
@@ -803,10 +658,15 @@ const headingPlaceholder = computed(() => {
 
 /* ========== 拖拽样式 ========== */
 
-/* 被拖拽的源块 - 显示空占位 */
+/* 被拖拽的源块 - 可见并高亮，通过 transform 移动到目标位置 */
 .block-wrapper.is-dragging {
-  opacity: 0;
   min-height: 28px;
+  opacity: 1 !important;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(24, 144, 255, 0.3);
+  background: linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%);
+  border: 2px solid #1890ff;
+  transition: transform 0.15s ease-out;
 }
 
 /* 拖拽进行中时，所有块显示激活样式 */
