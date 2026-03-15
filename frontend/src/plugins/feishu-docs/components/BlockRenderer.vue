@@ -953,6 +953,7 @@ const headingPlaceholder = computed(() => {
   outline: none;
   min-height: 1em;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 .block-content:empty::before {
