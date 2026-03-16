@@ -63,6 +63,8 @@ export interface Note {
   visibility: 'private' | 'public'
   categoryId?: string | null
   category_id?: string | null  // snake_case from backend
+  editorType?: string  // Editor type: docx, feishu-docs, excel, etc.
+  editor_type?: string  // snake_case from backend
   createdAt: string
   created_at?: string  // snake_case from backend
   updatedAt: string
@@ -78,6 +80,7 @@ export interface CreateNoteDto {
   isPinned?: boolean
   visibility?: 'private' | 'public'
   categoryId?: string | null
+  editorType?: string  // Editor type: docx, feishu-docs, excel, etc.
 }
 
 /**
@@ -89,6 +92,7 @@ export interface UpdateNoteDto {
   isPinned?: boolean
   visibility?: 'private' | 'public'
   categoryId?: string | null
+  editorType?: string  // Editor type
 }
 
 /**

@@ -2,6 +2,7 @@
 
 from app.models.user import User, RefreshToken
 from app.models.note import Note, NoteAttachment, NoteVersion
+from app.models.note_block import NoteBlock
 from app.models.share import ShareLink
 from app.models.ai_search import DocumentChunk, SearchHistory, SearchFeedback
 from app.models.tag import Tag, NoteTag, Category
@@ -15,6 +16,7 @@ __all__ = [
     "Note",
     "NoteAttachment",
     "NoteVersion",
+    "NoteBlock",
     # Sharing
     "ShareLink",
     # AI Search & RAG

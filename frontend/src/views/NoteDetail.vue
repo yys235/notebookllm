@@ -29,12 +29,25 @@ const saving = ref(false)
 const shareModalVisible = ref(false)
 const isEditing = ref(false) // Default to read-only mode
 
-// Editor type - read from query param or use default
+// 笔记元信息
+const noteAuthor = ref('')
+const noteCreatedAt = ref('')
+const noteUpdatedAt = ref('')
+
+// Editor type - read from query param, note data, or use default
+const loadedEditorType = ref<EditorType>('docx')
+
 const editorType = computed<EditorType>(() => {
+  // First priority: URL query param (for new notes)
   const type = route.query.type as string
   if (type && ['docx', 'docx-blocks', 'feishu-docs', 'excel', 'mindmap', 'flowchart'].includes(type)) {
     return type as EditorType
   }
+  // Second priority: loaded from note data (only if not default 'docx')
+  if (loadedEditorType.value) {
+    return loadedEditorType.value
+  }
+  // Default
   return 'docx'
 })
 
@@ -54,6 +67,12 @@ async function loadNote(id: string) {
       // Handle both camelCase and snake_case
       isPinned.value = note.isPinned ?? note.is_pinned ?? false
       visibility.value = note.visibility || 'private'
+      // 保存元信息
+      noteAuthor.value = note.userId || note.user_id || ''
+      noteCreatedAt.value = note.createdAt || note.created_at || ''
+      noteUpdatedAt.value = note.updatedAt || note.updated_at || ''
+      // Load editor type from note
+      loadedEditorType.value = (note.editorType || note.editor_type || 'docx') as EditorType
     }
   } catch (error: any) {
     message.error(error.message || 'Failed to load note')
@@ -111,6 +130,7 @@ async function finishEditing() {
         content: content.value || '<p></p>',
         isPinned: isPinned.value,
         visibility: visibility.value,
+        editorType: editorType.value,
       })
 
       if (note && note.id) {
@@ -126,6 +146,7 @@ async function finishEditing() {
         content: content.value || '<p></p>',
         isPinned: isPinned.value,
         visibility: visibility.value,
+        editorType: editorType.value,
       })
       message.success('笔记已保存')
       isEditing.value = false
@@ -151,6 +172,7 @@ async function saveNote() {
         content: content.value || '<p></p>',
         isPinned: isPinned.value,
         visibility: visibility.value,
+        editorType: editorType.value,
       })
 
       if (note && note.id) {
@@ -165,6 +187,7 @@ async function saveNote() {
         content: content.value || '<p></p>',
         isPinned: isPinned.value,
         visibility: visibility.value,
+        editorType: editorType.value,
       })
       message.success('笔记已保存')
     }
@@ -292,6 +315,8 @@ async function togglePinned() {
           placeholder="开始编写笔记，支持 Markdown 语法..."
           :editable="isEditing"
           :editor-type="editorType"
+          :created-at="noteCreatedAt"
+          :updated-at="noteUpdatedAt"
         />
       </div>
     </a-layout-content>

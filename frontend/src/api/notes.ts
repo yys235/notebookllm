@@ -9,6 +9,8 @@ function toSnakeCase(data: any): any {
       result.is_pinned = data[key]
     } else if (key === 'categoryId') {
       result.category_id = data[key]
+    } else if (key === 'editorType') {
+      result.editor_type = data[key]
     } else {
       result[key] = data[key]
     }

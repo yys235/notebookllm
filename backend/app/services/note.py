@@ -144,6 +144,7 @@ class NoteService:
             is_pinned=data.is_pinned,
             visibility=data.visibility,
             category_id=data.category_id,
+            editor_type=data.editor_type,
         )
         self.db.add(note)
         await self.db.flush()

@@ -4,6 +4,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { BlockData, DocumentData, BlockType } from '../types'
+import { blocksApi } from '@/api/blocks'
 
 // 生成唯一 ID
 function generateId(): string {
@@ -34,6 +35,12 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
   const document = ref<DocumentData | null>(null)
   const focusedBlockId = ref<string | null>(null)
   const isEditable = ref(true)
+
+  // Track pending changes for sync
+  const pendingChanges = ref<Set<string>>(new Set())
+  const currentNoteId = ref<string | null>(null)
+  const isLoading = ref(false)
+  const syncError = ref<string | null>(null)
 
   // 历史记录
   const history = ref<{
@@ -68,6 +75,8 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
   const canUndo = computed(() => history.value.past.length > 0)
   const canRedo = computed(() => history.value.future.length > 0)
 
+  const hasPendingChanges = computed(() => pendingChanges.value.size > 0)
+
   // ========== Actions ==========
 
   function initDocument(doc?: DocumentData) {
@@ -78,6 +87,8 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     }
     history.value = { past: [], future: [] }
     focusedBlockId.value = null
+    pendingChanges.value.clear()
+    syncError.value = null
   }
 
   function $reset() {
@@ -85,6 +96,9 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     focusedBlockId.value = null
     history.value = { past: [], future: [] }
     slashMenu.value = { visible: false, query: '', position: { x: 0, y: 0 } }
+    pendingChanges.value.clear()
+    currentNoteId.value = null
+    syncError.value = null
   }
 
   function saveSnapshot() {
@@ -121,6 +135,9 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     if (!block) return
     document.value.blocks[blockId] = { ...block, ...updates }
     document.value.updatedAt = new Date().toISOString()
+
+    // Track pending change for sync
+    pendingChanges.value.add(blockId)
   }
 
   function insertBlock(
@@ -179,6 +196,10 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     }
 
     document.value.updatedAt = new Date().toISOString()
+
+    // Track pending change for sync - mark as new block
+    pendingChanges.value.add(newBlockId)
+
     return newBlockId
   }
 
@@ -210,6 +231,9 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     if (focusedBlockId.value === blockId) {
       focusedBlockId.value = null
     }
+
+    // Track pending change for sync - mark deleted blocks with prefix
+    pendingChanges.value.add(`deleted:${blockId}`)
   }
 
   function moveBlock(
@@ -295,6 +319,9 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     }
 
     document.value.updatedAt = new Date().toISOString()
+
+    // Track pending change for sync
+    pendingChanges.value.add(`moved:${blockId}`)
   }
 
   function setFocusedBlock(blockId: string | null) {
@@ -372,6 +399,105 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     saveSnapshot()
     block.type = newType
     document.value.updatedAt = new Date().toISOString()
+
+    // Track pending change for sync
+    pendingChanges.value.add(blockId)
+  }
+
+  // ========== Server Sync Methods ==========
+
+  /**
+   * Load document blocks from server
+   */
+  async function loadFromServer(noteId: string) {
+    if (isLoading.value) return
+
+    isLoading.value = true
+    syncError.value = null
+    currentNoteId.value = noteId
+
+    try {
+      const blocks = await blocksApi.getBlocks(noteId)
+
+      // Convert blocks array to document format
+      const newDoc: DocumentData = {
+        id: noteId,
+        blocks: {},
+        rootBlockIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      // Build blocks map and root block IDs
+      blocks.forEach(block => {
+        newDoc.blocks[block.id] = block
+        if (!block.parentId) {
+          newDoc.rootBlockIds.push(block.id)
+        }
+      })
+
+      document.value = newDoc
+      history.value = { past: [], future: [] }
+      pendingChanges.value.clear()
+    } catch (error: any) {
+      syncError.value = error.message || 'Failed to load document'
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  /**
+   * Sync pending changes to server
+   */
+  async function syncWithServer(noteId?: string) {
+    if (pendingChanges.value.size === 0) return
+
+    const targetNoteId = noteId || currentNoteId.value
+    if (!targetNoteId) return
+
+    syncError.value = null
+
+    try {
+      // Collect all pending changes
+      const toUpdate: Array<{ id: string; data: any }> = []
+      const toDelete: string[] = []
+
+      for (const changeId of pendingChanges.value) {
+        if (changeId.startsWith('deleted:')) {
+          toDelete.push(changeId.replace('deleted:', ''))
+        } else if (changeId.startsWith('moved:')) {
+          // Moved blocks are handled by reorder
+          // For now, we'll skip tracking moved blocks separately
+          pendingChanges.value.delete(changeId)
+        } else {
+          const block = document.value?.blocks[changeId]
+          if (block) {
+            // Check if it's a new block (not synced yet)
+            // For simplicity, we'll use update for all existing blocks
+            toUpdate.push({
+              id: changeId,
+              data: {
+                content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+                attrs: block.attrs,
+              },
+            })
+          }
+        }
+      }
+
+      // Execute API calls
+      await Promise.all([
+        ...toUpdate.map(({ id, data }) => blocksApi.updateBlock(id, data)),
+        ...toDelete.map(id => blocksApi.deleteBlock(id)),
+      ])
+
+      // Clear synced changes
+      pendingChanges.value.clear()
+    } catch (error: any) {
+      syncError.value = error.message || 'Failed to sync document'
+      throw error
+    }
   }
 
   function toJSON(): DocumentData | null {
@@ -488,12 +614,17 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     isEditable,
     history,
     slashMenu,
+    pendingChanges,
+    currentNoteId,
+    isLoading,
+    syncError,
 
     // Getters
     rootBlocks,
     focusedBlock,
     canUndo,
     canRedo,
+    hasPendingChanges,
 
     // Actions
     initDocument,
@@ -513,6 +644,12 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     getPreviousBlock,
     getNextBlock,
     convertBlockType,
+
+    // Server Sync
+    loadFromServer,
+    syncWithServer,
+
+    // Import/Export
     toJSON,
     fromJSON,
     toHTML,

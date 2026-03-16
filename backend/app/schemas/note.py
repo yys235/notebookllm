@@ -17,12 +17,17 @@ class NoteBase(BaseModel):
     content: str = Field(..., description="Note content in markdown format")
 
 
+# Editor type
+EditorType = Literal["docx", "docx-blocks", "feishu-docs", "excel", "mindmap", "flowchart"]
+
+
 class NoteCreate(NoteBase):
     """Schema for creating a new note."""
 
     is_pinned: bool = Field(default=False, description="Pin note to top")
     visibility: VisibilityType = Field(default="private", description="Note visibility")
     category_id: str | None = Field(None, description="Category ID")
+    editor_type: EditorType = Field(default="docx", description="Editor type")
 
 
 class NoteUpdate(BaseModel):
@@ -33,6 +38,7 @@ class NoteUpdate(BaseModel):
     is_pinned: bool | None = None
     visibility: VisibilityType | None = Field(None, description="Note visibility")
     category_id: str | None = None
+    editor_type: EditorType | None = Field(None, description="Editor type")
 
 
 class NoteRead(NoteBase):
@@ -43,6 +49,7 @@ class NoteRead(NoteBase):
     is_pinned: bool = Field(default=False, description="Pin status")
     visibility: str = Field(default="private", description="Note visibility")
     category_id: str | None = Field(None, description="Category ID")
+    editor_type: str = Field(default="docx", description="Editor type")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
 
@@ -62,6 +69,8 @@ class NoteRead(NoteBase):
             data['isPinned'] = data.pop('is_pinned')
         if 'category_id' in data:
             data['categoryId'] = data.pop('category_id')
+        if 'editor_type' in data:
+            data['editorType'] = data.pop('editor_type')
         if 'created_at' in data:
             data['createdAt'] = data.pop('created_at')
         if 'updated_at' in data:

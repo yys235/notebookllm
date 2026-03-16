@@ -2,9 +2,9 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -38,6 +38,8 @@ class Note(Base):
         UUID(as_uuid=True),
         ForeignKey("categories.id", ondelete="SET NULL"),
     )
+    # Editor type: docx, feishu-docs, excel, mindmap, flowchart
+    editor_type: Mapped[str] = mapped_column(String(50), default="docx", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -46,6 +48,13 @@ class Note(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    # Relationships
+    blocks: Mapped[list["NoteBlock"]] = relationship(
+        "NoteBlock",
+        back_populates="note",
+        cascade="all, delete-orphan",
     )
 
 
@@ -100,3 +109,6 @@ class NoteVersion(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+# NoteBlock is defined in app/models/note_block.py to avoid circular imports
