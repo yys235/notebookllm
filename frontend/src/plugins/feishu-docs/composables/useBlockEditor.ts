@@ -330,22 +330,59 @@ export function useBlockEditor() {
       if (element) {
         element.focus()
 
-        // 设置光标位置
+        // 设置光标位置 - 需要遍历所有文本节点找到正确的位置
         const selection = window.getSelection()
+        if (!selection) return
+
         const range = document.createRange()
 
-        if (element.firstChild) {
-          const textNode = element.firstChild
-          const textLength = textNode.textContent?.length || 0
-          range.setStart(textNode, Math.min(offset, textLength))
-          range.collapse(true)
-        } else {
-          range.setStart(element, 0)
-          range.collapse(true)
+        // 遍历所有文本节点，找到偏移量对应的位置
+        let currentOffset = 0
+        let foundNode: Text | null = null
+        let foundOffset = 0
+
+        // 递归遍历元素中的所有文本节点
+        function findTextNodes(node: Node): Text[] {
+          const textNodes: Text[] = []
+          if (node.nodeType === Node.TEXT_NODE) {
+            textNodes.push(node as Text)
+          }
+          node.childNodes.forEach(child => {
+            textNodes.push(...findTextNodes(child))
+          })
+          return textNodes
         }
 
-        selection?.removeAllRanges()
-        selection?.addRange(range)
+        const textNodes = findTextNodes(element)
+
+        for (const textNode of textNodes) {
+          const nodeLength = textNode.textContent?.length || 0
+          if (currentOffset + nodeLength >= offset) {
+            // 目标位置在这个节点中
+            foundNode = textNode
+            foundOffset = offset - currentOffset
+            break
+          }
+          currentOffset += nodeLength
+        }
+
+        if (foundNode) {
+          range.setStart(foundNode, Math.min(foundOffset, foundNode.textContent?.length || 0))
+        } else {
+          // 如果没找到，设置到最后一个节点的末尾
+          const lastNode = textNodes[textNodes.length - 1]
+          if (lastNode) {
+            range.setStart(lastNode, lastNode.textContent?.length || 0)
+          } else if (element.firstChild) {
+            range.setStart(element.firstChild, 0)
+          } else {
+            range.setStart(element, 0)
+          }
+        }
+
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
 
         store.setFocusedBlock(blockId)
       }
