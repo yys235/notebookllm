@@ -46,6 +46,7 @@ declare module 'vue' {
     ASpin: typeof import('ant-design-vue/es')['Spin']
     ASwitch: typeof import('ant-design-vue/es')['Switch']
     ATag: typeof import('ant-design-vue/es')['Tag']
+    EditorHost: typeof import('./../components/editor/EditorHost.vue')['default']
     ErrorResult: typeof import('./../components/ErrorResult.vue')['default']
     GlobalLoading: typeof import('./../components/GlobalLoading.vue')['default']
     HelloWorld: typeof import('./../components/HelloWorld.vue')['default']

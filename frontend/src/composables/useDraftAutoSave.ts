@@ -1,9 +1,11 @@
 /**
  * useDraftAutoSave - 自动保存草稿
  * 在登录超时前保存编辑内容到 localStorage
+ * 支持用户隔离，确保不同用户的草稿不会混淆
  */
-import { ref, watch, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
+import { ref, watch, onUnmounted, type Ref } from 'vue'
+import { message, Modal } from 'ant-design-vue'
+import { useUserStore } from '@/stores/user'
 
 export interface DraftData {
   noteId: string
@@ -11,6 +13,7 @@ export interface DraftData {
   content: string
   editorType: string
   savedAt: number
+  userId: string // 添加用户ID用于隔离
 }
 
 const DRAFT_KEY_PREFIX = 'note_draft_'
@@ -43,19 +46,27 @@ function debounce<T extends (...args: any[]) => any>(fn: T, delay: number) {
 export function useDraftAutoSave(noteId: Ref<string | undefined>) {
   const hasDraft = ref(false)
   const draftSavedAt = ref<Date | null>(null)
+  const userStore = useUserStore()
 
-  // Get storage key for a note
+  // 获取当前用户ID
+  function getCurrentUserId(): string {
+    return userStore.user?.id || 'anonymous'
+  }
+
+  // Get storage key for a note (with user isolation)
   function getDraftKey(id: string): string {
-    return `${DRAFT_KEY_PREFIX}${id}`
+    const userId = getCurrentUserId()
+    return `${DRAFT_KEY_PREFIX}${userId}_${id}`
   }
 
   // Save draft to localStorage
-  function saveDraft(data: Omit<DraftData, 'savedAt'>) {
+  function saveDraft(data: Omit<DraftData, 'savedAt' | 'userId'>) {
     if (!data.noteId) return
 
     const draft: DraftData = {
       ...data,
       savedAt: Date.now(),
+      userId: getCurrentUserId(),
     }
 
     try {
@@ -76,6 +87,12 @@ export function useDraftAutoSave(noteId: Ref<string | undefined>) {
       if (!stored) return null
 
       const draft: DraftData = JSON.parse(stored)
+
+      // Verify draft belongs to current user (security check)
+      if (draft.userId && draft.userId !== getCurrentUserId()) {
+        clearDraft(id)
+        return null
+      }
 
       // Check if draft is expired
       if (Date.now() - draft.savedAt > DRAFT_EXPIRY_MS) {
@@ -176,7 +193,3 @@ export function useDraftAutoSave(noteId: Ref<string | undefined>) {
     restoreDraft,
   }
 }
-
-// Import ref and Modal types
-import { Ref } from 'vue'
-import { Modal } from 'ant-design-vue'

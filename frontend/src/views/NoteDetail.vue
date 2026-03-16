@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -12,19 +12,59 @@ import {
   CheckOutlined,
 } from '@ant-design/icons-vue'
 import { noteApi } from '@/api/notes'
+import { useUserStore } from '@/stores/user'
 import EditorHost from '@/components/editor/EditorHost.vue'
 import ShareModal from '@/components/ShareModal.vue'
 import type { EditorType } from '@/plugins/core/types'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 
-// ========== 草稿自动保存 ==========
+// ========== 响应式状态声明 ==========
+const isNew = computed(() => route.name === 'NoteNew' || route.params.id === 'new')
+const noteId = computed(() => route.params.id as string)
+const title = ref('')
+const content = ref('<p></p>')
+const isPinned = ref(false)
+const visibility = ref<'private' | 'public'>('private')
+const saving = ref(false)
+const shareModalVisible = ref(false)
+const isEditing = ref(false)
+
+// 笔记元信息
+const noteAuthor = ref('')
+const noteCreatedAt = ref('')
+const noteUpdatedAt = ref('')
+
+// Editor type
+const loadedEditorType = ref<EditorType>('docx')
+
+const editorType = computed<EditorType>(() => {
+  const type = route.query.type as string
+  if (type && ['docx', 'docx-blocks', 'feishu-docs', 'excel', 'mindmap', 'flowchart'].includes(type)) {
+    return type as EditorType
+  }
+  if (loadedEditorType.value) {
+    return loadedEditorType.value
+  }
+  return 'docx'
+})
+
+// ========== 草稿自动保存（带用户隔离）==========
 const DRAFT_KEY_PREFIX = 'note_draft_'
+const DRAFT_EXPIRY_MS = 24 * 60 * 60 * 1000 // 24 hours
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
 
-function getDraftKey(id: string) {
-  return `${DRAFT_KEY_PREFIX}${id}`
+// 获取当前用户ID，用于草稿隔离
+function getCurrentUserId(): string {
+  return userStore.user?.id || 'anonymous'
+}
+
+// 生成草稿key，包含用户ID确保数据隔离
+function getDraftKey(noteId: string): string {
+  const userId = getCurrentUserId()
+  return `${DRAFT_KEY_PREFIX}${userId}_${noteId}`
 }
 
 function saveDraft() {
@@ -39,40 +79,17 @@ function saveDraft() {
     visibility: visibility.value,
     editorType: editorType.value,
     timestamp: Date.now(),
+    userId: getCurrentUserId(), // 记录所属用户
   }
   localStorage.setItem(getDraftKey(id), JSON.stringify(draft))
-}
-
-function loadDraft(id: string): boolean {
-  const key = getDraftKey(id)
-  const saved = localStorage.getItem(key)
-  if (!saved) return false
-
-  try {
-    const draft = JSON.parse(saved)
-    // Only restore if draft is less than 24 hours old
-    if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
-      title.value = draft.title || ''
-      content.value = draft.content || '<p></p>'
-      isPinned.value = draft.isPinned || false
-      visibility.value = draft.visibility || 'private'
-      if (draft.editorType) {
-        loadedEditorType.value = draft.editorType
-      }
-      return true
-    }
-  } catch (e) {
-    console.error('Failed to load draft:', e)
-  }
-  return false
 }
 
 function clearDraft(id: string) {
   localStorage.removeItem(getDraftKey(id))
 }
 
-// 监听内容变化，自动保存草稿
-watch([title, content], () => {
+// 监听内容变化，自动保存草稿（防抖2秒）
+watch([title, content, isEditing], () => {
   if (!isEditing.value) return
   if (draftSaveTimer) clearTimeout(draftSaveTimer)
   draftSaveTimer = setTimeout(() => {
@@ -80,74 +97,15 @@ watch([title, content], () => {
   }, 2000)
 })
 
-// 页面加载时检查草稿
-onMounted(() => {
-  const id = isNew.value ? 'new' : noteId.value
-  if (id) {
-    // 检查是否有草稿
-    const hasDraft = loadDraft(id)
-    if (hasDraft) {
-      Modal.confirm({
-        title: '发现未保存的草稿',
-        content: '检测到您之前有未保存的编辑内容，是否恢复？',
-        okText: '恢复',
-        cancelText: '放弃',
-        onOk: () => {
-          isEditing.value = true
-          message.success('草稿已恢复')
-        },
-        onCancel: () => {
-          clearDraft(id)
-        },
-      })
-    }
-  }
-})
-
 // 页面卸载时清理定时器
-onMounted(() => {
-  return () => {
-    if (draftSaveTimer) {
-      clearTimeout(draftSaveTimer)
-    }
+onUnmounted(() => {
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
   }
 })
 
-const isNew = computed(() => route.name === 'NoteNew' || route.params.id === 'new')
-const title = ref('')
-const content = ref('<p></p>')
-const isPinned = ref(false)
-const visibility = ref<'private' | 'public'>('private')
-const noteId = computed(() => route.params.id as string)
-const saving = ref(false)
-const shareModalVisible = ref(false)
-const isEditing = ref(false) // Default to read-only mode
-
-// 笔记元信息
-const noteAuthor = ref('')
-const noteCreatedAt = ref('')
-const noteUpdatedAt = ref('')
-
-// Editor type - read from query param, note data, or use default
-const loadedEditorType = ref<EditorType>('docx')
-
-const editorType = computed<EditorType>(() => {
-  // First priority: URL query param (for new notes)
-  const type = route.query.type as string
-  if (type && ['docx', 'docx-blocks', 'feishu-docs', 'excel', 'mindmap', 'flowchart'].includes(type)) {
-    return type as EditorType
-  }
-  // Second priority: loaded from note data (only if not default 'docx')
-  if (loadedEditorType.value) {
-    return loadedEditorType.value
-  }
-  // Default
-  return 'docx'
-})
-
-// 加载笔记
+// ========== 笔记加载与编辑 ==========
 async function loadNote(id: string) {
-  // 验证 ID 是否有效
   if (!id || id === 'new' || id === 'undefined') {
     console.log('跳过加载笔记，ID 无效:', id)
     return
@@ -158,14 +116,11 @@ async function loadNote(id: string) {
     if (note) {
       title.value = note.title
       content.value = note.content || '<p></p>'
-      // Handle both camelCase and snake_case
       isPinned.value = note.isPinned ?? note.is_pinned ?? false
       visibility.value = note.visibility || 'private'
-      // 保存元信息
       noteAuthor.value = note.userId || note.user_id || ''
       noteCreatedAt.value = note.createdAt || note.created_at || ''
       noteUpdatedAt.value = note.updatedAt || note.updated_at || ''
-      // Load editor type from note
       loadedEditorType.value = (note.editorType || note.editor_type || 'docx') as EditorType
     }
   } catch (error: any) {
@@ -174,14 +129,62 @@ async function loadNote(id: string) {
   }
 }
 
+// 检查并提示恢复草稿
+function checkAndRestoreDraft() {
+  const id = isNew.value ? 'new' : noteId.value
+  if (!id) return
+
+  const key = getDraftKey(id)
+  const saved = localStorage.getItem(key)
+  if (!saved) return
+
+  try {
+    const draft = JSON.parse(saved)
+
+    // 验证草稿属于当前用户
+    if (draft.userId && draft.userId !== getCurrentUserId()) {
+      localStorage.removeItem(key)
+      return
+    }
+
+    // 检查是否过期
+    if (Date.now() - draft.timestamp > DRAFT_EXPIRY_MS) {
+      localStorage.removeItem(key)
+      return
+    }
+
+    // 提示用户恢复
+    Modal.confirm({
+      title: '发现未保存的草稿',
+      content: `检测到您在 ${new Date(draft.timestamp).toLocaleString()} 有未保存的编辑内容，是否恢复？`,
+      okText: '恢复',
+      cancelText: '放弃',
+      onOk: () => {
+        title.value = draft.title || ''
+        content.value = draft.content || '<p></p>'
+        isPinned.value = draft.isPinned || false
+        visibility.value = draft.visibility || 'private'
+        if (draft.editorType) {
+          loadedEditorType.value = draft.editorType
+        }
+        isEditing.value = true
+        message.success('草稿已恢复')
+      },
+      onCancel: () => {
+        clearDraft(id)
+      },
+    })
+  } catch (e) {
+    console.error('Failed to check draft:', e)
+  }
+}
+
 // 监听路由参数变化
 watch(
   () => route.params.id,
   (newId) => {
-    // Don't load if we're on the "new note" route or id is invalid
     if (route.name === 'NoteNew' || !newId || newId === 'new' || newId === 'undefined') {
       console.log('Skipping note load, route:', route.name, 'id:', newId)
-      // New notes should be in edit mode
       isEditing.value = true
       return
     }
@@ -197,20 +200,28 @@ watch(isNew, (isNewNote) => {
   }
 }, { immediate: true })
 
+// 页面加载时检查草稿
+onMounted(() => {
+  // 延迟检查草稿，确保路由参数已就绪
+  setTimeout(() => {
+    checkAndRestoreDraft()
+  }, 100)
+})
+
 function startEditing() {
   isEditing.value = true
 }
 
 function cancelEditing() {
   isEditing.value = false
-  // Reload original content if canceling edit
   if (!isNew.value && noteId.value) {
     loadNote(noteId.value)
+    // 取消编辑时清除草稿
+    clearDraft(noteId.value)
   }
 }
 
 async function finishEditing() {
-  // 先保存再退出
   if (!title.value.trim()) {
     message.warning('请输入标题')
     return
@@ -230,7 +241,7 @@ async function finishEditing() {
       if (note && note.id) {
         message.success('笔记已保存')
         isEditing.value = false
-        clearDraft('new') // Clear draft for new notes
+        clearDraft('new')
         router.replace(`/notes/${note.id}`)
       } else {
         message.error('保存失败')
@@ -245,7 +256,7 @@ async function finishEditing() {
       })
       message.success('笔记已保存')
       isEditing.value = false
-      clearDraft(noteId.value) // Clear draft after successful save
+      clearDraft(noteId.value)
     }
   } catch (error: any) {
     message.error(error.message || '保存失败')
@@ -273,7 +284,7 @@ async function saveNote() {
 
       if (note && note.id) {
         message.success('笔记已创建')
-        clearDraft('new') // Clear draft for new notes
+        clearDraft('new')
         router.replace(`/notes/${note.id}`)
       } else {
         message.error('创建笔记失败')
@@ -287,7 +298,7 @@ async function saveNote() {
         editorType: editorType.value,
       })
       message.success('笔记已保存')
-      clearDraft(route.params.id as string) // Clear draft after successful save
+      clearDraft(route.params.id as string)
     }
   } catch (error: any) {
     message.error(error.message || '保存失败')
@@ -306,6 +317,8 @@ async function deleteNote() {
     onOk: async () => {
       try {
         await noteApi.deleteNote(route.params.id as string)
+        // 删除笔记时同时清除草稿
+        clearDraft(route.params.id as string)
         message.success('笔记已删除')
         router.push('/notes')
       } catch (error: any) {
@@ -319,15 +332,13 @@ function goBack() {
   router.push('/notes')
 }
 
-// Toggle pinned status (works in both read and edit mode)
 async function togglePinned() {
-  if (isNew.value) return // Can't toggle pinned for new notes before saving
+  if (isNew.value) return
 
   try {
     await noteApi.updateNote(noteId.value, { isPinned: isPinned.value })
     message.success(isPinned.value ? '已置顶' : '已取消置顶')
   } catch (error: any) {
-    // Revert on error
     isPinned.value = !isPinned.value
     message.error(error.message || '操作失败')
   }
