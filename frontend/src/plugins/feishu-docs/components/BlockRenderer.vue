@@ -257,6 +257,11 @@ function handleDragEnd(_event: DragEvent) {
   })
 }
 
+// 删除块
+function handleDelete() {
+  store.deleteBlock(props.block.id)
+}
+
 // 拖拽进入
 function handleDragEnter(event: DragEvent) {
   event.preventDefault()
@@ -377,6 +382,16 @@ const headingPlaceholder = computed(() => {
     >
       <span class="handle-icon">⋮⋮</span>
     </div>
+
+    <!-- 删除按钮 -->
+    <button
+      v-if="isEditable"
+      class="block-delete-btn"
+      title="删除"
+      @click.stop="handleDelete"
+    >
+      <span class="delete-icon">×</span>
+    </button>
 
     <!-- 拖拽位置预览指示器 -->
     <div v-if="isDragOver" class="drag-indicator" :class="dragPosition">
@@ -676,6 +691,39 @@ const headingPlaceholder = computed(() => {
 
 .block-handle:hover {
   background: #f0f0f0;
+}
+
+/* 删除按钮 */
+.block-delete-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  color: #999;
+  font-size: 16px;
+  font-weight: bold;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0;
+  margin: 0;
+}
+
+.block-delete-btn:hover {
+  background: #ff4d4f;
+  color: white;
+}
+
+.block-wrapper:hover .block-delete-btn {
+  opacity: 1;
 }
 
 .block-wrapper.is-focused {
