@@ -44,7 +44,12 @@ request.interceptors.response.use(
           // Only redirect to login for non-public APIs
           if (!isPublicApi) {
             localStorage.removeItem('token')
-            window.location.href = '/login'
+            // Save current path for redirect after login
+            const currentPath = window.location.pathname + window.location.search
+            // Don't redirect to login page if already on login page
+            if (!currentPath.startsWith('/login') && !currentPath.startsWith('/register')) {
+              window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`
+            }
           }
           break
         case 403:
