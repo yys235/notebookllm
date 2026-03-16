@@ -79,9 +79,36 @@ function handlePaste(event: ClipboardEvent) {
   if (!clipboardData) return
 
   const text = clipboardData.getData('text/plain')
-  if (text) {
-    event.preventDefault()
+  if (!text) return
+
+  event.preventDefault()
+
+  // 检测是否有多行文本
+  const lines = text.split('\n')
+
+  if (lines.length <= 1) {
+    // 单行文本，直接插入
     document.execCommand('insertText', false, text)
+    return
+  }
+
+  // 多行文本，分割成多个块
+  // 第一行插入到当前位置
+  const firstLine = lines[0]
+  document.execCommand('insertText', false, firstLine)
+
+  // 同步当前块内容
+  editor.syncBlockContent(props.block.id)
+
+  // 后续行创建新块
+  let previousBlockId = props.block.id
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i]
+    const newBlockId = store.insertBlock(
+      { type: 'text', content: line },
+      { afterId: previousBlockId, parentId: props.block.parentId }
+    )
+    previousBlockId = newBlockId
   }
 }
 
@@ -816,7 +843,8 @@ const headingPlaceholder = computed(() => {
   white-space: pre-wrap;
 }
 
-.block-content:empty::before {
+/* 只有激活且为空时才显示占位符 */
+.block-wrapper.is-focused .block-content:empty::before {
   content: attr(data-placeholder);
   color: #bfbfbf;
   pointer-events: none;
