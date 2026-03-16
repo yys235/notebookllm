@@ -6,6 +6,22 @@ import { ref, computed, nextTick } from 'vue'
 import { useDocumentStore } from '../stores/document'
 import type { BlockType } from '../types'
 
+/**
+ * 计算光标在 contenteditable 元素中的真实偏移量
+ * range.startOffset 只返回相对于当前文本节点的偏移量
+ * 这个函数遍历所有文本节点来计算相对于整个内容的偏移量
+ */
+function getCursorOffset(element: HTMLElement): number {
+  const selection = window.getSelection()
+  if (!selection || selection.rangeCount === 0) return 0
+
+  const range = selection.getRangeAt(0)
+  const preCaretRange = range.cloneRange()
+  preCaretRange.selectNodeContents(element)
+  preCaretRange.setEnd(range.startContainer, range.startOffset)
+  return preCaretRange.toString().length
+}
+
 export function useBlockEditor() {
   const store = useDocumentStore()
 
@@ -199,13 +215,13 @@ export function useBlockEditor() {
     const block = store.getBlock(blockId)
     if (!block) return
 
-    // 获取当前光标位置的内容
-    const selection = window.getSelection()
-    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-    if (!range) return
+    // 获取 contenteditable 元素
+    const element = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
+    if (!element) return
 
+    // 使用正确的光标位置计算方法
     const content = getBlockContent(blockId)
-    const offset = range.startOffset
+    const offset = getCursorOffset(element)
     const beforeContent = content.slice(0, offset)
     const afterContent = content.slice(offset)
 
