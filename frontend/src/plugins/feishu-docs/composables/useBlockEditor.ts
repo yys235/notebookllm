@@ -9,17 +9,63 @@ import type { BlockType } from '../types'
 /**
  * 计算光标在 contenteditable 元素中的真实偏移量
  * range.startOffset 只返回相对于当前文本节点的偏移量
- * 这个函数遍历所有文本节点来计算相对于整个内容的偏移量
+ * 这个函数使用 Range API 正确计算相对于整个内容的偏移量
  */
 function getCursorOffset(element: HTMLElement): number {
   const selection = window.getSelection()
   if (!selection || selection.rangeCount === 0) return 0
 
   const range = selection.getRangeAt(0)
-  const preCaretRange = range.cloneRange()
-  preCaretRange.selectNodeContents(element)
-  preCaretRange.setEnd(range.startContainer, range.startOffset)
-  return preCaretRange.toString().length
+
+  // 检查 range 是否在元素内
+  if (!element.contains(range.startContainer)) {
+    return 0
+  }
+
+  try {
+    const preCaretRange = range.cloneRange()
+    preCaretRange.selectNodeContents(element)
+    preCaretRange.setEnd(range.startContainer, range.startOffset)
+    return preCaretRange.toString().length
+  } catch (e) {
+    // 如果出错，返回 0
+    console.warn('getCursorOffset error:', e)
+    return 0
+  }
+}
+
+/**
+ * 检查光标是否在元素内容的开头
+ */
+function isCursorAtStart(element: HTMLElement): boolean {
+  const offset = getCursorOffset(element)
+  return offset === 0
+}
+
+/**
+ * 检查光标是否在元素内容的末尾
+ */
+function isCursorAtEnd(element: HTMLElement, content: string): boolean {
+  const offset = getCursorOffset(element)
+  return offset >= content.length
+}
+
+/**
+ * 获取元素中的所有文本节点
+ */
+function getTextNodes(element: HTMLElement): Text[] {
+  const textNodes: Text[] = []
+
+  function traverse(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      textNodes.push(node as Text)
+    } else {
+      node.childNodes.forEach(traverse)
+    }
+  }
+
+  traverse(element)
+  return textNodes
 }
 
 export function useBlockEditor() {
@@ -114,10 +160,13 @@ export function useBlockEditor() {
     if (!block) return
 
     const content = getBlockContent(blockId)
-    const selection = window.getSelection()
-    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-    const atStart = range ? range.startOffset === 0 && range.collapsed : false
-    const atEnd = range ? range.endOffset === content.length && range.collapsed : false
+
+    // 获取 contenteditable 元素
+    const element = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
+
+    // 使用正确的光标位置判断方法
+    const atStart = element ? isCursorAtStart(element) : false
+    const atEnd = element ? isCursorAtEnd(element, content) : false
 
     // 处理斜杠菜单键盘导航
     if (store.slashMenu.visible) {
@@ -137,15 +186,15 @@ export function useBlockEditor() {
         if (atStart && content === '') {
           event.preventDefault()
           handleBackspaceOnEmpty(blockId)
-        } else if (atStart) {
-          // 合并到上一个块
+        } else if (atStart && content !== '') {
+          // 光标在开头且有内容，合并到上一个块
           event.preventDefault()
           handleMergeWithPrevious(blockId)
         }
         break
 
       case 'Delete':
-        if (atEnd) {
+        if (atEnd && content !== '') {
           event.preventDefault()
           handleMergeWithNext(blockId)
         }
@@ -327,65 +376,62 @@ export function useBlockEditor() {
   function focusBlock(blockId: string, offset: number = 0) {
     nextTick(() => {
       const element = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
-      if (element) {
-        element.focus()
+      if (!element) return
 
-        // 设置光标位置 - 需要遍历所有文本节点找到正确的位置
-        const selection = window.getSelection()
-        if (!selection) return
+      element.focus()
 
+      const selection = window.getSelection()
+      if (!selection) return
+
+      // 获取所有文本节点
+      const textNodes = getTextNodes(element)
+
+      // 如果没有文本节点，创建一个空的
+      if (textNodes.length === 0) {
         const range = document.createRange()
-
-        // 遍历所有文本节点，找到偏移量对应的位置
-        let currentOffset = 0
-        let foundNode: Text | null = null
-        let foundOffset = 0
-
-        // 递归遍历元素中的所有文本节点
-        function findTextNodes(node: Node): Text[] {
-          const textNodes: Text[] = []
-          if (node.nodeType === Node.TEXT_NODE) {
-            textNodes.push(node as Text)
-          }
-          node.childNodes.forEach(child => {
-            textNodes.push(...findTextNodes(child))
-          })
-          return textNodes
-        }
-
-        const textNodes = findTextNodes(element)
-
-        for (const textNode of textNodes) {
-          const nodeLength = textNode.textContent?.length || 0
-          if (currentOffset + nodeLength >= offset) {
-            // 目标位置在这个节点中
-            foundNode = textNode
-            foundOffset = offset - currentOffset
-            break
-          }
-          currentOffset += nodeLength
-        }
-
-        if (foundNode) {
-          range.setStart(foundNode, Math.min(foundOffset, foundNode.textContent?.length || 0))
-        } else {
-          // 如果没找到，设置到最后一个节点的末尾
-          const lastNode = textNodes[textNodes.length - 1]
-          if (lastNode) {
-            range.setStart(lastNode, lastNode.textContent?.length || 0)
-          } else if (element.firstChild) {
-            range.setStart(element.firstChild, 0)
-          } else {
-            range.setStart(element, 0)
-          }
-        }
-
+        range.setStart(element, 0)
         range.collapse(true)
         selection.removeAllRanges()
         selection.addRange(range)
-
         store.setFocusedBlock(blockId)
+        return
       }
+
+      // 遍历所有文本节点，找到偏移量对应的位置
+      let currentOffset = 0
+      let foundNode: Text | null = null
+      let foundOffset = 0
+
+      for (const textNode of textNodes) {
+        const nodeLength = textNode.textContent?.length || 0
+        if (currentOffset + nodeLength >= offset) {
+          // 目标位置在这个节点中
+          foundNode = textNode
+          foundOffset = offset - currentOffset
+          break
+        }
+        currentOffset += nodeLength
+      }
+
+      const range = document.createRange()
+
+      if (foundNode) {
+        // 确保偏移量不超过节点长度
+        const maxOffset = foundNode.textContent?.length || 0
+        range.setStart(foundNode, Math.min(foundOffset, maxOffset))
+      } else {
+        // 如果没找到（offset 超出总长度），设置到最后一个节点的末尾
+        const lastNode = textNodes[textNodes.length - 1]
+        if (lastNode) {
+          range.setStart(lastNode, lastNode.textContent?.length || 0)
+        }
+      }
+
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+
+      store.setFocusedBlock(blockId)
     })
   }
 
@@ -457,5 +503,9 @@ export function useBlockEditor() {
     handleUnindent,
     // 暴露 focusedBlockId 以便 slash commands 使用
     focusedBlockId: computed(() => store.focusedBlockId),
+    // 暴露辅助函数供外部使用
+    getCursorOffset,
+    isCursorAtStart,
+    isCursorAtEnd,
   }
 }
