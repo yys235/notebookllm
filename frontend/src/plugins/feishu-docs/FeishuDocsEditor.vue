@@ -210,11 +210,26 @@ function handleSlashCommandSelect(cmd: any) {
   store.hideSlashMenu()
 
   // 清除当前块中的斜杠命令文本 (例如 "/h1")
+  // 只清除块开头或空格后的 / 命令文本，避免误删 URL 中的 /
   if (store.focusedBlockId) {
     const content = editor.getBlockContent(store.focusedBlockId)
-    const slashIndex = content.lastIndexOf('/')
-    if (slashIndex >= 0) {
-      const newContent = content.slice(0, slashIndex)
+
+    // 查找触发命令的 / 位置（只在块开头或空格后查找）
+    let commandSlashIndex = -1
+
+    // 检查是否以 / 开头
+    if (content.startsWith('/')) {
+      commandSlashIndex = 0
+    } else {
+      // 查找空格后的 /
+      const spaceSlashMatch = content.match(/\s\/[^/]*$/)
+      if (spaceSlashMatch && spaceSlashMatch.index !== undefined) {
+        commandSlashIndex = spaceSlashMatch.index + 1 // +1 是空格的长度
+      }
+    }
+
+    if (commandSlashIndex >= 0) {
+      const newContent = content.slice(0, commandSlashIndex)
       editor.setBlockContent(store.focusedBlockId, newContent)
       store.updateBlock(store.focusedBlockId, { content: newContent })
     }
