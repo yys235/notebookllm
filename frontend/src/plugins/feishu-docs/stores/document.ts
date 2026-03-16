@@ -5,6 +5,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { BlockData, DocumentData, BlockType } from '../types'
 import { blocksApi } from '@/api/blocks'
+import { uploadApi } from '@/api/upload'
 
 // 生成唯一 ID
 function generateId(): string {
@@ -213,6 +214,19 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     // 递归删除子块
     if (block.children) {
       [...block.children].forEach(childId => deleteBlock(childId))
+    }
+
+    // 如果是图片块，删除服务器上的图片文件
+    if (block.type === 'image' && block.attrs?.src) {
+      const src = block.attrs.src as string
+      // 提取文件名：/uploads/{user_id}/{filename}
+      const match = src.match(/\/uploads\/[^/]+\/([^/]+)$/)
+      if (match && match[1]) {
+        // 异步删除，不阻塞主流程
+        uploadApi.deleteImage(match[1]).catch(() => {
+          // 忽略删除失败，不影响用户体验
+        })
+      }
     }
 
     // 从父块中移除

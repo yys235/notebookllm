@@ -1,4 +1,5 @@
 """Note business logic service."""
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -9,6 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.note import Note, NoteAttachment, NoteVersion
 from app.schemas.note import NoteCreate, NoteUpdate
+from app.services.storage import StorageService
 
 
 class NoteService:
@@ -190,8 +192,48 @@ class NoteService:
         await self.db.refresh(note)
         return note
 
+    @staticmethod
+    def _extract_image_filenames(content: str, user_id: str) -> list[str]:
+        """Extract image filenames from note content.
+
+        Args:
+            content: Note content (HTML or JSON)
+            user_id: User ID to match upload paths
+
+        Returns:
+            List of filenames found in content
+        """
+        filenames = []
+        # Match patterns like /uploads/{user_id}/{filename}
+        pattern = rf'/uploads/{user_id}/([a-zA-Z0-9_\-\.]+)'
+        matches = re.findall(pattern, content)
+        filenames.extend(matches)
+        return filenames
+
+    async def _cleanup_note_images(self, note: Note) -> None:
+        """Clean up images associated with a note.
+
+        Args:
+            note: Note to clean up images for
+        """
+        user_id = str(note.user_id)
+        content = note.content or ""
+
+        # Extract filenames from content
+        filenames = self._extract_image_filenames(content, user_id)
+
+        # Delete each image file
+        for filename in filenames:
+            try:
+                StorageService.delete_image(user_id, filename)
+            except Exception:
+                # Log but don't fail the deletion
+                pass
+
     async def soft_delete(self, note: Note) -> Note:
         """Soft delete a note (mark as deleted).
+
+        Note: Images are NOT deleted during soft delete to allow restoration.
 
         Args:
             note: Note instance to delete
@@ -207,11 +249,14 @@ class NoteService:
         return note
 
     async def permanent_delete(self, note: Note) -> None:
-        """Permanently delete a note.
+        """Permanently delete a note and its associated images.
 
         Args:
             note: Note instance to delete
         """
+        # Clean up associated images before deleting the note
+        await self._cleanup_note_images(note)
+
         await self.db.delete(note)
         await self.db.commit()
 
@@ -429,6 +474,8 @@ class NoteService:
     async def empty_trash(self, user_id: str | uuid.UUID) -> int:
         """Permanently delete all soft-deleted notes for a user.
 
+        Also cleans up all associated images.
+
         Args:
             user_id: User ID
 
@@ -447,6 +494,8 @@ class NoteService:
 
         count = len(notes)
         for note in notes:
+            # Clean up associated images before deleting
+            await self._cleanup_note_images(note)
             await self.db.delete(note)
 
         await self.db.commit()
