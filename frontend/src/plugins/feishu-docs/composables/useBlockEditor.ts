@@ -55,21 +55,37 @@ export function useBlockEditor() {
     const content = target.innerText
     setBlockContent(blockId, content)
 
-    // 检测斜杠命令
+    // 检测斜杠命令 - 只在块开头或空格后触发
     if (content.endsWith('/')) {
-      const selection = window.getSelection()
-      const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
-      if (range) {
-        const rect = range.getBoundingClientRect()
-        if (rect) {
-          store.showSlashMenu({ x: rect.left, y: rect.bottom + 8 })
+      // 获取 / 之前的内容
+      const beforeSlash = content.slice(0, -1)
+
+      // 只有当 / 前面是空的或只有空格时才触发命令菜单
+      // 这样可以避免 URL (https://) 或文件路径 (path/to/) 中的 / 触发菜单
+      if (beforeSlash === '' || /^\s*$/.test(beforeSlash)) {
+        const selection = window.getSelection()
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+        if (range) {
+          const rect = range.getBoundingClientRect()
+          if (rect) {
+            store.showSlashMenu({ x: rect.left, y: rect.bottom + 8 })
+          }
         }
+      } else if (store.slashMenu.visible) {
+        // 如果菜单已打开但输入了非命令的 /，关闭菜单
+        store.hideSlashMenu()
       }
     } else if (store.slashMenu.visible) {
       // 更新查询
       const slashIndex = content.lastIndexOf('/')
       if (slashIndex >= 0) {
-        store.updateSlashMenuQuery(content.slice(slashIndex + 1))
+        const beforeSlash = content.slice(0, slashIndex)
+        // 只有当 / 前面是空的或只有空格时才继续显示菜单
+        if (beforeSlash === '' || /^\s*$/.test(beforeSlash)) {
+          store.updateSlashMenuQuery(content.slice(slashIndex + 1))
+        } else {
+          store.hideSlashMenu()
+        }
       } else {
         store.hideSlashMenu()
       }
