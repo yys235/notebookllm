@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -18,6 +18,100 @@ import type { EditorType } from '@/plugins/core/types'
 
 const router = useRouter()
 const route = useRoute()
+
+// ========== 草稿自动保存 ==========
+const DRAFT_KEY_PREFIX = 'note_draft_'
+let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function getDraftKey(id: string) {
+  return `${DRAFT_KEY_PREFIX}${id}`
+}
+
+function saveDraft() {
+  if (!isEditing.value) return
+  const id = isNew.value ? 'new' : noteId.value
+  if (!id) return
+
+  const draft = {
+    title: title.value,
+    content: content.value,
+    isPinned: isPinned.value,
+    visibility: visibility.value,
+    editorType: editorType.value,
+    timestamp: Date.now(),
+  }
+  localStorage.setItem(getDraftKey(id), JSON.stringify(draft))
+}
+
+function loadDraft(id: string): boolean {
+  const key = getDraftKey(id)
+  const saved = localStorage.getItem(key)
+  if (!saved) return false
+
+  try {
+    const draft = JSON.parse(saved)
+    // Only restore if draft is less than 24 hours old
+    if (Date.now() - draft.timestamp < 24 * 60 * 60 * 1000) {
+      title.value = draft.title || ''
+      content.value = draft.content || '<p></p>'
+      isPinned.value = draft.isPinned || false
+      visibility.value = draft.visibility || 'private'
+      if (draft.editorType) {
+        loadedEditorType.value = draft.editorType
+      }
+      return true
+    }
+  } catch (e) {
+    console.error('Failed to load draft:', e)
+  }
+  return false
+}
+
+function clearDraft(id: string) {
+  localStorage.removeItem(getDraftKey(id))
+}
+
+// 监听内容变化，自动保存草稿
+watch([title, content], () => {
+  if (!isEditing.value) return
+  if (draftSaveTimer) clearTimeout(draftSaveTimer)
+  draftSaveTimer = setTimeout(() => {
+    saveDraft()
+  }, 2000)
+})
+
+// 页面加载时检查草稿
+onMounted(() => {
+  const id = isNew.value ? 'new' : noteId.value
+  if (id) {
+    // 检查是否有草稿
+    const hasDraft = loadDraft(id)
+    if (hasDraft) {
+      Modal.confirm({
+        title: '发现未保存的草稿',
+        content: '检测到您之前有未保存的编辑内容，是否恢复？',
+        okText: '恢复',
+        cancelText: '放弃',
+        onOk: () => {
+          isEditing.value = true
+          message.success('草稿已恢复')
+        },
+        onCancel: () => {
+          clearDraft(id)
+        },
+      })
+    }
+  }
+})
+
+// 页面卸载时清理定时器
+onMounted(() => {
+  return () => {
+    if (draftSaveTimer) {
+      clearTimeout(draftSaveTimer)
+    }
+  }
+})
 
 const isNew = computed(() => route.name === 'NoteNew' || route.params.id === 'new')
 const title = ref('')
@@ -136,6 +230,7 @@ async function finishEditing() {
       if (note && note.id) {
         message.success('笔记已保存')
         isEditing.value = false
+        clearDraft('new') // Clear draft for new notes
         router.replace(`/notes/${note.id}`)
       } else {
         message.error('保存失败')
@@ -150,6 +245,7 @@ async function finishEditing() {
       })
       message.success('笔记已保存')
       isEditing.value = false
+      clearDraft(noteId.value) // Clear draft after successful save
     }
   } catch (error: any) {
     message.error(error.message || '保存失败')
@@ -177,6 +273,7 @@ async function saveNote() {
 
       if (note && note.id) {
         message.success('笔记已创建')
+        clearDraft('new') // Clear draft for new notes
         router.replace(`/notes/${note.id}`)
       } else {
         message.error('创建笔记失败')
@@ -190,6 +287,7 @@ async function saveNote() {
         editorType: editorType.value,
       })
       message.success('笔记已保存')
+      clearDraft(route.params.id as string) // Clear draft after successful save
     }
   } catch (error: any) {
     message.error(error.message || '保存失败')
