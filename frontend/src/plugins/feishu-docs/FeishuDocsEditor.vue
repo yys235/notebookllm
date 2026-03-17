@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 飞书文档编辑器 - 主组件
+ * 块文档编辑器 - 主组件
  * 完全独立的块级编辑器，不依赖 Tiptap
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, provide, nextTick } from 'vue'

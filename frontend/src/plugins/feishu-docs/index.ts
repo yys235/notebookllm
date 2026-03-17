@@ -1,5 +1,5 @@
 /**
- * 飞书文档编辑器插件
+ * 块文档编辑器插件
  * 完全独立的块级编辑器，不依赖 Tiptap
  */
 import type { EditorPlugin } from '../core/types'
@@ -22,8 +22,8 @@ export { slashCommands, commandCategories } from './commands/slashCommands'
 // 插件定义
 const FeishuDocsPlugin: EditorPlugin = {
   id: 'feishu-docs',
-  name: '飞书文档',
-  description: '类飞书文档的块级编辑器，支持丰富的块类型和格式',
+  name: '块文档',
+  description: '块级编辑器，支持丰富的块类型和格式',
   version: '1.0.0',
   icon: '📝',
   supportedBlocks: [

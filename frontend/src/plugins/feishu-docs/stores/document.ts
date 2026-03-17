@@ -1,5 +1,5 @@
 /**
- * 飞书文档 - Pinia 状态管理
+ * 块文档 - Pinia 状态管理
  */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'

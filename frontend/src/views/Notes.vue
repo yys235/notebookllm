@@ -39,7 +39,7 @@ const selectedDocType = ref<EditorType>('docx')
 const docTypes = [
   {
     type: 'feishu-docs' as EditorType,
-    name: '飞书文档',
+    name: '块文档',
     description: '块级编辑器，支持斜杠命令、拖拽等',
     icon: FileTextOutlined,
     color: '#1890ff',
