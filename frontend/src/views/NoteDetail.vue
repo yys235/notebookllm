@@ -85,6 +85,11 @@ function saveDraft() {
 }
 
 function clearDraft(id: string) {
+  // 取消待执行的草稿保存定时器
+  if (draftSaveTimer) {
+    clearTimeout(draftSaveTimer)
+    draftSaveTimer = null
+  }
   localStorage.removeItem(getDraftKey(id))
 }
 
