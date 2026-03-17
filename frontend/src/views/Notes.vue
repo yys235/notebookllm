@@ -44,6 +44,7 @@ const docTypes = [
     icon: FileTextOutlined,
     color: '#1890ff',
     bgColor: '#e6f7ff',
+    disabled: false,
   },
   {
     type: 'docx' as EditorType,
@@ -52,6 +53,7 @@ const docTypes = [
     icon: FileTextOutlined,
     color: '#52c41a',
     bgColor: '#f6ffed',
+    disabled: true,
   },
   {
     type: 'excel' as EditorType,
@@ -60,6 +62,7 @@ const docTypes = [
     icon: TableOutlined,
     color: '#fa8c16',
     bgColor: '#fff7e6',
+    disabled: true,
   },
   {
     type: 'mindmap' as EditorType,
@@ -68,6 +71,7 @@ const docTypes = [
     icon: ApartmentOutlined,
     color: '#722ed1',
     bgColor: '#f9f0ff',
+    disabled: true,
   },
   {
     type: 'flowchart' as EditorType,
@@ -76,6 +80,7 @@ const docTypes = [
     icon: BranchesOutlined,
     color: '#eb2f96',
     bgColor: '#fff0f6',
+    disabled: true,
   },
 ]
 
@@ -161,6 +166,8 @@ function showCreateNoteModal() {
 }
 
 function selectDocType(type: EditorType) {
+  const docType = docTypes.find(d => d.type === type)
+  if (docType?.disabled) return
   selectedDocType.value = type
 }
 
@@ -395,17 +402,20 @@ function goToSettings() {
           v-for="docType in docTypes"
           :key="docType.type"
           class="doc-type-card"
-          :class="{ 'selected': selectedDocType === docType.type }"
-          @click="selectDocType(docType.type)"
+          :class="{ 'selected': selectedDocType === docType.type, 'disabled': docType.disabled }"
+          @click="!docType.disabled && selectDocType(docType.type)"
         >
           <div class="doc-type-icon" :style="{ backgroundColor: docType.bgColor, color: docType.color }">
             <component :is="docType.icon" />
           </div>
           <div class="doc-type-info">
-            <div class="doc-type-name">{{ docType.name }}</div>
+            <div class="doc-type-name">
+              {{ docType.name }}
+              <a-tag v-if="docType.disabled" color="default" size="small">即将推出</a-tag>
+            </div>
             <div class="doc-type-desc">{{ docType.description }}</div>
           </div>
-          <div v-if="selectedDocType === docType.type" class="doc-type-check">
+          <div v-if="selectedDocType === docType.type && !docType.disabled" class="doc-type-check">
             <a-checkbox checked />
           </div>
         </div>
@@ -742,6 +752,16 @@ function goToSettings() {
 .doc-type-card.selected {
   border-color: #1890ff;
   background: #e6f7ff;
+}
+
+.doc-type-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.doc-type-card.disabled:hover {
+  border-color: #e8e8e8;
+  background: transparent;
 }
 
 .doc-type-icon {
