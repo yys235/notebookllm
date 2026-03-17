@@ -10,6 +10,8 @@ import {
 } from '@ant-design/icons-vue'
 import { sharesApi } from '@/api/shares'
 import { formatCalendarTime } from '@/utils/date'
+import EditorHost from '@/components/editor/EditorHost.vue'
+import type { EditorType } from '@/plugins/core/types'
 
 const route = useRoute()
 const shareToken = route.params.shareId as string
@@ -26,6 +28,15 @@ const shareUrl = computed(() => window.location.href)
 const formattedDate = computed(() => {
   if (!note.value?.updated_at) return ''
   return formatCalendarTime(note.value.updated_at)
+})
+
+// 获取编辑器类型
+const editorType = computed<EditorType>(() => {
+  const type = note.value?.editor_type || note.value?.editorType
+  if (type && ['docx', 'feishu-docs', 'docx-blocks'].includes(type)) {
+    return type as EditorType
+  }
+  return 'feishu-docs' // 默认使用块文档编辑器
 })
 
 onMounted(async () => {
@@ -224,7 +235,14 @@ function handlePasswordSubmit() {
 
       <!-- Content -->
       <main class="note-content">
-        <div v-if="noteContent" class="note-html-content" v-html="noteContent"></div>
+        <EditorHost
+          v-if="noteContent"
+          v-model="noteContent"
+          :editable="false"
+          :editor-type="editorType"
+          :created-at="note.created_at"
+          :updated-at="note.updated_at"
+        />
         <div v-else class="content-loading">
           <a-spin />
         </div>
