@@ -47,8 +47,22 @@ function initContent(el: any) {
   if (el) {
     contentRef.value = el as HTMLElement
     const content = editor.getBlockContent(props.block.id)
-    if (el.innerText !== content) {
-      el.innerText = content
+    const elInnerText = el.innerText
+
+    // 如果 DOM 内容与期望内容不同
+    if (elInnerText !== content) {
+      // 检查是否 DOM 内容已经比 editingContent 更新（合并操作后可能发生）
+      // 如果 DOM 内容更长且包含 editingContent，说明 DOM 是正确的
+      if (elInnerText.length > content.length && elInnerText.includes(content)) {
+        // 将 DOM 内容同步到 editingContent
+        editor.setBlockContent(props.block.id, elInnerText)
+        return
+      }
+
+      // 只有在块没有被聚焦时才更新 DOM
+      if (store.focusedBlockId !== props.block.id) {
+        el.innerText = content
+      }
     }
   }
 }

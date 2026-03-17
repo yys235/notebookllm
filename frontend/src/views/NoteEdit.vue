@@ -369,6 +369,12 @@ export default {
   background: white;
   border-bottom: 1px solid #e8e8e8;
   height: 60px;
+  min-height: 60px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
 }
 
 .header-left {
@@ -379,8 +385,8 @@ export default {
 }
 
 .title-input {
-  flex: 1;
-  max-width: 500px;
+  width: 400px;
+  flex-shrink: 0;
 }
 
 .title-input :deep(.ant-input) {

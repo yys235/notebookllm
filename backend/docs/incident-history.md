@@ -2,6 +2,53 @@
 
 ## 2026-03-16
 
+### Playwright E2E 测试框架配置
+
+- **功能**: 配置 Playwright 自动化测试框架
+- **目标**: 为飞书文档编辑器添加 E2E 测试
+- **完成状态**: ✅ 已完成
+
+#### 实现内容:
+1. 安装 `@playwright/test` 和 `playwright`
+2. 创建 `playwright.config.ts` 配置文件
+3. 创建测试文件:
+   - `e2e/basic.spec.ts` - 基础页面加载测试
+   - `e2e/auth.spec.ts` - 认证流程测试
+   - `e2e/block-editor.spec.ts` - 块编辑器基础测试
+   - `e2e/feishu-editor.spec.ts` - 飞书编辑器深度测试 (26个测试)
+4. 添加 npm scripts: `test`, `test:ui`, `test:headed`, `test:debug`
+
+#### 测试覆盖:
+- 页面加载和导航
+- 登录/注册表单
+- 块编辑器输入、键盘操作、斜杠命令
+- Enter 键分割块
+- Backspace 键合并块
+- 光标位置处理
+- 特殊字符和 URL 输入
+
+### Backspace 合并块 Bug 修复
+
+- **问题**: 在块开头按 Backspace 合并到上一个块时，内容丢失
+- **根因**: Vue 响应式更新时序问题
+  - `handleMergeWithPrevious` 调用 `setBlockContent` 设置合并内容
+  - `store.deleteBlock` 触发 Vue 重新渲染
+  - `BlockRenderer.initContent` 在渲染时被调用
+  - 但 `getBlockContent` 获取的是旧的 `editingContent` 值
+- **修复**: 在 `initContent` 中检测 DOM 内容是否已更新（合并操作后）
+  - 如果 DOM 内容比 `editingContent` 更长且包含它，说明 DOM 是正确的
+  - 此时将 DOM 内容同步到 `editingContent`，而不是重置 DOM
+
+#### 修改文件:
+- `src/plugins/feishu-docs/composables/useBlockEditor.ts`
+  - 修复 `getBlockContent` 优先返回 `editingContent`
+  - 修复 `setBlockContent` 使用对象展开创建新引用
+  - 简化 `handleMergeWithPrevious` 逻辑
+- `src/plugins/feishu-docs/components/BlockRenderer.vue`
+  - 修复 `initContent` 检测 DOM 内容是否更新
+- `src/plugins/feishu-docs/stores/document.ts`
+  - 修复 `updateBlock` 创建新对象触发 Vue 响应式更新
+
 ### 块级存储功能实现
 
 - **功能**: 实现 feishu-docs 编辑器的块级存储

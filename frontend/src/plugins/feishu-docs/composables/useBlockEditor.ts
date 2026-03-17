@@ -2,7 +2,7 @@
  * 块编辑器核心 composable
  * 处理键盘事件、选择、剪贴板等
  */
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { useDocumentStore } from '../stores/document'
 import type { BlockType } from '../types'
 
@@ -76,17 +76,42 @@ export function useBlockEditor() {
 
   // 获取块的编辑内容
   function getBlockContent(blockId: string): string {
-    if (editingContent.value[blockId] !== undefined) {
-      return editingContent.value[blockId]
+    // 如果 editingContent 有值，优先使用它（用户正在编辑）
+    const editingVal = editingContent.value[blockId]
+    if (editingVal !== undefined) {
+      return editingVal
     }
+
+    // 否则从 store 获取
     const block = store.getBlock(blockId)
-    if (!block) return ''
-    return typeof block.content === 'string' ? block.content : ''
+    if (block) {
+      return typeof block.content === 'string' ? block.content : ''
+    }
+
+    return ''
   }
 
   // 更新块的编辑内容
   function setBlockContent(blockId: string, content: string) {
-    editingContent.value[blockId] = content
+    // 创建新对象以确保 Vue 响应式系统检测到变化
+    editingContent.value = {
+      ...editingContent.value,
+      [blockId]: content
+    }
+  }
+
+  // 监视 editingContent 变化（仅开发环境调试用）
+  if (import.meta.env.DEV) {
+    watch(
+      () => ({ ...editingContent.value }),
+      (newVal, oldVal) => {
+        const changedKeys = Object.keys(newVal).filter(k => newVal[k] !== oldVal?.[k])
+        if (changedKeys.length > 0) {
+          console.log('editingContent changed:', changedKeys.map(k => ({ blockId: k, from: oldVal?.[k], to: newVal[k] })))
+        }
+      },
+      { deep: true }
+    )
   }
 
   // 同步内容到 store
@@ -183,6 +208,7 @@ export function useBlockEditor() {
         break
 
       case 'Backspace':
+        console.log('Backspace key:', { blockId, atStart, content, contentLength: content.length })
         if (atStart && content === '') {
           event.preventDefault()
           handleBackspaceOnEmpty(blockId)
@@ -319,20 +345,31 @@ export function useBlockEditor() {
     const prevBlock = store.getPreviousBlock(blockId)
     if (!prevBlock) return
 
+    // 直接从 DOM 获取当前块的内容（最可靠的方式）
+    const currentElement = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
+    const currentContent = currentElement?.innerText || ''
+
     const prevContent = getBlockContent(prevBlock.id)
-    const currentContent = getBlockContent(blockId)
 
     // 合并内容
     const mergedContent = prevContent + currentContent
+
+    // 1. 先更新 editingContent（确保在 Vue 重新渲染之前）
     setBlockContent(prevBlock.id, mergedContent)
+
+    // 2. 更新 store（这会触发 Vue 响应式更新）
     store.updateBlock(prevBlock.id, { content: mergedContent })
 
-    // 聚焦到合并位置
-    focusBlock(prevBlock.id, prevContent.length)
-
-    // 删除当前块
-    store.deleteBlock(blockId)
+    // 3. 清理当前块的 editingContent
     delete editingContent.value[blockId]
+
+    // 4. 删除当前块（这会触发 Vue 重新渲染）
+    store.deleteBlock(blockId)
+
+    // 5. 等待 DOM 更新后聚焦到合并位置
+    nextTick(() => {
+      focusBlock(prevBlock.id, prevContent.length)
+    })
   }
 
   // 合并到下一个块

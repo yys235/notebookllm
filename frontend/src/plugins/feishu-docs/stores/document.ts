@@ -134,8 +134,19 @@ export const useDocumentStore = defineStore('feishu-docs', () => {
     if (!document.value) return
     const block = document.value.blocks[blockId]
     if (!block) return
-    document.value.blocks[blockId] = { ...block, ...updates }
-    document.value.updatedAt = new Date().toISOString()
+
+    // 创建新的块对象
+    const newBlock = { ...block, ...updates }
+
+    // 创建新的 blocks 对象以触发 Vue 响应式更新
+    const newBlocks = { ...document.value.blocks, [blockId]: newBlock }
+
+    // 创建新的 document 对象以确保 Vue 检测到变化
+    document.value = {
+      ...document.value,
+      blocks: newBlocks,
+      updatedAt: new Date().toISOString(),
+    }
 
     // Track pending change for sync
     pendingChanges.value.add(blockId)
