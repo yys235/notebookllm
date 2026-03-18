@@ -323,6 +323,9 @@ export function useBlockEditor() {
         { afterId: blockId, parentId: block.parentId }
       )
 
+      // 立即设置新块的 editingContent，避免 focusBlock 触发 input 事件时内容为空
+      setBlockContent(newBlockId, afterContent)
+
       // 更新当前块的 store 数据
       setBlockContent(blockId, beforeContent)
       store.updateBlock(blockId, { content: beforeContent })
