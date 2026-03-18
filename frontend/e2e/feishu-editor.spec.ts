@@ -91,6 +91,97 @@ test.describe('飞书编辑器 - Enter键分割块', () => {
     expect(firstContent).toBe('测试内容')
   })
 
+  test('在块末尾按Enter新块应为空（Bug复现：不应带多余文字）', async ({ page }) => {
+    // 输入中文文本
+    await focusFirstBlockAndType(page, '数据分析')
+    await page.waitForTimeout(200)
+
+    // 确保光标在末尾
+    await page.keyboard.press('End')
+    await page.waitForTimeout(100)
+
+    // 在末尾按 Enter
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+
+    // 检查分割结果
+    const firstContent = await getBlockContent(page, 0)
+    const secondContent = await getBlockContent(page, 1)
+
+    console.log('Bug复现测试 - 第一个块内容:', firstContent)
+    console.log('Bug复现测试 - 第二个块内容:', secondContent)
+
+    // 第一个块应该包含完整内容
+    expect(firstContent).toBe('数据分析')
+
+    // 第二个块应该是空的（Bug：可能会带"析"字）
+    expect(secondContent).toBe('')
+  })
+
+  test('输入中文后失焦再聚焦然后Enter应正确分割', async ({ page }) => {
+    // 输入中文文本
+    await focusFirstBlockAndType(page, '数据分析报告')
+    await page.waitForTimeout(200)
+
+    // 点击页面其他地方失焦
+    await page.click('body', { position: { x: 10, y: 10 } })
+    await page.waitForTimeout(300)
+
+    // 重新点击块获取焦点
+    const firstBlock = page.locator('.block-content[contenteditable="true"]').first()
+    await firstBlock.click()
+    await page.waitForTimeout(200)
+
+    // 确保光标在末尾
+    await page.keyboard.press('End')
+    await page.waitForTimeout(100)
+
+    // 在末尾按 Enter
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(300)
+
+    // 检查分割结果
+    const firstContent = await getBlockContent(page, 0)
+    const secondContent = await getBlockContent(page, 1)
+
+    console.log('失焦再聚焦后Enter测试 - 第一个块内容:', firstContent)
+    console.log('失焦再聚焦后Enter测试 - 第二个块内容:', secondContent)
+
+    // 第一个块应该包含完整内容
+    expect(firstContent).toBe('数据分析报告')
+
+    // 第二个块应该是空的
+    expect(secondContent).toBe('')
+  })
+
+  test('多次Enter和中文输入不应丢失内容', async ({ page }) => {
+    // 输入多行中文
+    await focusFirstBlockAndType(page, '第一行')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+    await page.keyboard.type('第二行')
+    await page.waitForTimeout(100)
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(200)
+    await page.keyboard.type('第三行')
+    await page.waitForTimeout(200)
+
+    // 检查所有块
+    const count = await getBlockCount(page)
+    console.log('多行输入测试 - 块数量:', count)
+
+    for (let i = 0; i < count; i++) {
+      const content = await getBlockContent(page, i)
+      console.log(`块 ${i} 内容:`, content)
+    }
+
+    expect(count).toBe(3)
+    expect(await getBlockContent(page, 0)).toBe('第一行')
+    expect(await getBlockContent(page, 1)).toBe('第二行')
+    expect(await getBlockContent(page, 2)).toBe('第三行')
+  })
+
   test('在块中间按Enter应分割块', async ({ page }) => {
     // 输入文本
     await focusFirstBlockAndType(page, '第一部分第二部分')

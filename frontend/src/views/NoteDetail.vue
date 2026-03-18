@@ -102,11 +102,13 @@ watch([title, content, isEditing], () => {
   }, 2000)
 })
 
-// 页面卸载时清理定时器
+// 页面卸载时清理定时器和事件监听
 onUnmounted(() => {
   if (draftSaveTimer) {
     clearTimeout(draftSaveTimer)
   }
+  // 移除键盘快捷键监听
+  window.removeEventListener('keydown', handleKeydown)
 })
 
 // ========== 笔记加载与编辑 ==========
@@ -211,6 +213,9 @@ onMounted(() => {
   setTimeout(() => {
     checkAndRestoreDraft()
   }, 100)
+
+  // 添加键盘快捷键监听
+  window.addEventListener('keydown', handleKeydown)
 })
 
 function startEditing() {
@@ -309,6 +314,63 @@ async function saveNote() {
     message.error(error.message || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+// Ctrl+S 保存但不退出编辑模式
+async function saveOnly() {
+  if (!title.value.trim()) {
+    message.warning('请输入标题')
+    return
+  }
+
+  saving.value = true
+  try {
+    if (isNew.value) {
+      const note = await noteApi.createNote({
+        title: title.value,
+        content: content.value || '<p></p>',
+        isPinned: isPinned.value,
+        visibility: visibility.value,
+        editorType: editorType.value,
+      })
+
+      if (note && note.id) {
+        message.success('笔记已保存')
+        clearDraft('new')
+        router.replace(`/notes/${note.id}`)
+        // 保持编辑模式
+        isEditing.value = true
+      } else {
+        message.error('保存失败')
+      }
+    } else {
+      await noteApi.updateNote(noteId.value, {
+        title: title.value,
+        content: content.value || '<p></p>',
+        isPinned: isPinned.value,
+        visibility: visibility.value,
+        editorType: editorType.value,
+      })
+      message.success('笔记已保存')
+      clearDraft(noteId.value)
+      // 保持编辑模式，不设置 isEditing.value = false
+    }
+  } catch (error: any) {
+    message.error(error.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+// 键盘快捷键处理
+function handleKeydown(event: KeyboardEvent) {
+  // Ctrl+S 或 Cmd+S 保存
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+    event.preventDefault()
+    if (isEditing.value) {
+      saveOnly()
+    }
   }
 }
 

@@ -294,26 +294,62 @@ export function useBlockEditor() {
     const element = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
     if (!element) return
 
-    // 使用正确的光标位置计算方法
-    const content = getBlockContent(blockId)
-    const offset = getCursorOffset(element)
-    const beforeContent = content.slice(0, offset)
-    const afterContent = content.slice(offset)
+    // 使用 Selection API 获取光标位置和分割点
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
 
-    // 更新当前块
-    setBlockContent(blockId, beforeContent)
-    store.updateBlock(blockId, { content: beforeContent })
+    const range = selection.getRangeAt(0)
 
-    // 创建新块
-    const newBlockId = store.insertBlock(
-      { type: 'text', content: afterContent },
-      { afterId: blockId, parentId: block.parentId }
-    )
+    // 检查 range 是否在元素内
+    if (!element.contains(range.startContainer)) return
 
-    // 聚焦新块
-    nextTick(() => {
-      focusBlock(newBlockId, 0)
-    })
+    try {
+      // 使用 Range API 计算光标前的内容
+      const preCaretRange = range.cloneRange()
+      preCaretRange.selectNodeContents(element)
+      preCaretRange.setEnd(range.startContainer, range.startOffset)
+      const beforeContent = preCaretRange.toString()
+
+      // 使用 Range API 计算光标后的内容
+      const postCaretRange = range.cloneRange()
+      postCaretRange.selectNodeContents(element)
+      postCaretRange.setStart(range.startContainer, range.startOffset)
+      const afterContent = postCaretRange.toString()
+
+      // 调试日志
+      console.log('handleEnter 调试:', {
+        blockId,
+        光标前内容: beforeContent,
+        光标后内容: afterContent,
+        光标前长度: beforeContent.length,
+        光标后长度: afterContent.length,
+        原始DOM: element.innerText,
+        editingContent: editingContent.value[blockId]
+      })
+
+      // 先创建新块（这会触发 Vue 响应式更新）
+      const newBlockId = store.insertBlock(
+        { type: 'text', content: afterContent },
+        { afterId: blockId, parentId: block.parentId }
+      )
+
+      // 更新当前块的 store 数据
+      setBlockContent(blockId, beforeContent)
+      store.updateBlock(blockId, { content: beforeContent })
+
+      // 在 nextTick 中更新 DOM（确保在 Vue 响应式更新之后）
+      nextTick(() => {
+        // 再次确保当前块的 DOM 内容正确
+        const currentElement = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
+        if (currentElement && currentElement.innerText !== beforeContent) {
+          currentElement.innerText = beforeContent
+        }
+        // 聚焦新块
+        focusBlock(newBlockId, 0)
+      })
+    } catch (e) {
+      console.error('handleEnter error:', e)
+    }
   }
 
   // 处理空块的 Backspace
