@@ -208,7 +208,6 @@ export function useBlockEditor() {
         break
 
       case 'Backspace':
-        console.log('Backspace key:', { blockId, atStart, content, contentLength: content.length })
         if (atStart && content === '') {
           event.preventDefault()
           handleBackspaceOnEmpty(blockId)
@@ -294,7 +293,7 @@ export function useBlockEditor() {
     const element = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
     if (!element) return
 
-    // 使用 Selection API 获取光标位置和分割点
+    // 使用 Selection API 获取光标位置
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) return
 
@@ -304,30 +303,21 @@ export function useBlockEditor() {
     if (!element.contains(range.startContainer)) return
 
     try {
-      // 使用 Range API 计算光标前的内容
+      // 使用 innerText 获取完整的文本内容（保留换行符）
+      const fullContent = element.innerText
+
+      // 使用 Range API 计算光标偏移量
       const preCaretRange = range.cloneRange()
       preCaretRange.selectNodeContents(element)
       preCaretRange.setEnd(range.startContainer, range.startOffset)
-      const beforeContent = preCaretRange.toString()
+      const cursorOffset = preCaretRange.toString().length
 
-      // 使用 Range API 计算光标后的内容
-      const postCaretRange = range.cloneRange()
-      postCaretRange.selectNodeContents(element)
-      postCaretRange.setStart(range.startContainer, range.startOffset)
-      const afterContent = postCaretRange.toString()
+      // 根据 innerText 和偏移量分割内容
+      // 注意：innerText 中的换行符是 \n，需要保留
+      const beforeContent = fullContent.slice(0, cursorOffset)
+      const afterContent = fullContent.slice(cursorOffset)
 
-      // 调试日志
-      console.log('handleEnter 调试:', {
-        blockId,
-        光标前内容: beforeContent,
-        光标后内容: afterContent,
-        光标前长度: beforeContent.length,
-        光标后长度: afterContent.length,
-        原始DOM: element.innerText,
-        editingContent: editingContent.value[blockId]
-      })
-
-      // 先创建新块（这会触发 Vue 响应式更新）
+      // 先创建新块
       const newBlockId = store.insertBlock(
         { type: 'text', content: afterContent },
         { afterId: blockId, parentId: block.parentId }
@@ -337,12 +327,11 @@ export function useBlockEditor() {
       setBlockContent(blockId, beforeContent)
       store.updateBlock(blockId, { content: beforeContent })
 
-      // 在 nextTick 中更新 DOM（确保在 Vue 响应式更新之后）
+      // 在 nextTick 中更新 DOM
       nextTick(() => {
-        // 再次确保当前块的 DOM 内容正确
         const currentElement = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
         if (currentElement) {
-          // 使用 innerHTML 并将换行符转换为 <br>，确保多行文本正确显示
+          // 将换行符转换为 <br>，确保多行文本正确显示
           const htmlContent = beforeContent.replace(/\n/g, '<br>')
           if (currentElement.innerHTML !== htmlContent) {
             currentElement.innerHTML = htmlContent
