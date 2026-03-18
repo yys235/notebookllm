@@ -341,8 +341,12 @@ export function useBlockEditor() {
       nextTick(() => {
         // 再次确保当前块的 DOM 内容正确
         const currentElement = document.querySelector(`[data-block-id="${blockId}"] .block-content`) as HTMLElement | null
-        if (currentElement && currentElement.innerText !== beforeContent) {
-          currentElement.innerText = beforeContent
+        if (currentElement) {
+          // 使用 innerHTML 并将换行符转换为 <br>，确保多行文本正确显示
+          const htmlContent = beforeContent.replace(/\n/g, '<br>')
+          if (currentElement.innerHTML !== htmlContent) {
+            currentElement.innerHTML = htmlContent
+          }
         }
         // 聚焦新块
         focusBlock(newBlockId, 0)
