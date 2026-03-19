@@ -398,8 +398,19 @@ export function useBlockEditor() {
     // 4. 删除当前块（这会触发 Vue 重新渲染）
     store.deleteBlock(blockId)
 
-    // 5. 等待 DOM 更新后聚焦到合并位置
+    // 5. 立即更新上一个块的 DOM，确保在 focus 之前 DOM 已经有正确的内容
+    // 这样当 focus 触发 input 事件时，DOM 内容已经是正确的
     nextTick(() => {
+      const prevElement = document.querySelector(`[data-block-id="${prevBlock.id}"] .block-content`) as HTMLElement | null
+      if (prevElement) {
+        // 将换行符转换为 <br>
+        const htmlContent = mergedContent.replace(/\n/g, '<br>')
+        if (prevElement.innerHTML !== htmlContent) {
+          prevElement.innerHTML = htmlContent
+        }
+      }
+
+      // 6. 聚焦到合并位置
       focusBlock(prevBlock.id, prevContent.length)
     })
   }
